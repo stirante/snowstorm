@@ -61,11 +61,11 @@
                 <option value="fancy">Fancy</option>
                 <option value="vibrant">Vibrant Visuals</option>
             </select>
-            <select id="environment" v-model="environment" @change="changeEnvironment()" title="Environment">
-                <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.label }}</option>
+            <select id="environment" @change="environment = environments[$event.target.selectedIndex].id; changeEnvironment()" title="Environment">
+                <option v-for="env in environments" :key="env.id" :selected="env.id == environment">{{ env.label }}</option>
             </select>
-            <select id="quality" v-model="quality" @change="changeQuality()" title="Render resolution">
-                <option v-for="q in qualities" :key="q.id" :value="q.id" :title="q.title">{{ q.label }}</option>
+            <select id="quality" @change="quality = qualities[$event.target.selectedIndex].id; changeQuality()" title="Render resolution">
+                <option v-for="q in qualities" :key="q.id" :selected="q.id == quality" :title="q.title">{{ q.label }}</option>
             </select>
             <div class="tool" :class="{toggle_enabled: show_mers}" @click="show_mers = !show_mers" title="Vibrant Visuals texture set (MER / MERS)" style="width: auto; padding: 0 8px;">MER</div>
             <input class="time_slider" type="range" min="0" max="1" step="0.005" :value="(game.time + 0.5) % 1" @input="changeTime($event)" :title="'Time of day ' + clock">
@@ -407,17 +407,18 @@
     }
     .mers_row > span:first-child {
         width: 78px;
+        flex-shrink: 0;
     }
     .mers_row input[type=range] {
         flex: 1;
-        appearance: auto;
-        -webkit-appearance: auto;
+        min-width: 0;
+        width: auto;
         padding: 0;
-        background: transparent;
-        border: none;
+        --color-track: var(--color-title);
     }
     .mers_value {
         width: 28px;
+        flex-shrink: 0;
         text-align: right;
     }
     .mers_note {
