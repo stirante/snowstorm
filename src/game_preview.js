@@ -252,6 +252,7 @@ async function openViewport() {
 		Game.status = '';
 		[canvas.width, canvas.height] = scene.size;
 		viewport = br.open(canvas, text, SCANS);
+		sentCamera = '';
 		await applyCollision();
 	})();
 	try { await opening; } finally { opening = null; }
@@ -422,6 +423,7 @@ function facing(mode, d) {
 const clamp01 = x => Math.min(1, Math.max(0, x));
 const STRIDE = 21;
 let packed = new Float32Array(0);
+let sentCamera = '';
 
 // The string table the renderer gets: each simulator string index -> renderer index (texture or material).
 function rendererStrings(strings) {
@@ -464,7 +466,11 @@ function draw() {
 		canvas.width = w; canvas.height = h;
 		br.resize(viewport, w, h);
 	}
-	br.set_camera(viewport, JSON.stringify(camera()));
+	let cam = JSON.stringify(camera());
+	if (cam !== sentCamera) {
+		br.set_camera(viewport, cam);
+		sentCamera = cam;
+	}
 	sendParticles();
 	br.render(viewport);
 }
