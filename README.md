@@ -1,9 +1,9 @@
 # Snowstorm
 
 > **This fork** ([stirante.com/snowstorm](https://stirante.com/snowstorm/)) previews effects the way the game runs
-> them: [particle-sim](https://github.com/stirante/particle-sim) (the game's particle rules on molang-go, as WASM)
-> simulates the effect and bedrock-renderer (the game's Fancy and Vibrant Visuals pipelines, WebGPU) draws the whole
-> view; three.js only keeps the orbit camera. The footer picks Fancy or Vibrant Visuals, the environment (a grid, a
+> them: bedrock-renderer's WASM simulates the effect with [particle-sim](https://github.com/stirante/particle-sim)
+> (the game's particle rules, Rust) and draws the whole view with the game's Fancy and Vibrant Visuals pipelines
+> (WebGPU); `src/orbit.js` is the camera. The footer picks Fancy or Vibrant Visuals, the environment (a grid, a
 > grass floor or a scanned vanilla area with block collision), the render resolution (Fast = CSS pixels, Sharp = screen pixels)
 > and the time of day. MER opens the effect's Vibrant Visuals texture set (uniform MERS values or a MER / MERS image),
 > which can be downloaded as the pack's `.texture_set.json`. The View menu's grid, axes,

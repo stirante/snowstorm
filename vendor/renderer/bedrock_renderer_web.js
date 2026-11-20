@@ -385,6 +385,185 @@ export function set_time(id, time) {
 }
 
 /**
+ * Registers a .particle.json text with the simulator; returns its identifier.
+ * @param {string} json
+ * @returns {string}
+ */
+export function sim_add(json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.sim_add(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+export function sim_clear_solid() {
+    wasm.sim_clear_solid();
+}
+
+/**
+ * @returns {number}
+ */
+export function sim_count() {
+    const ret = wasm.sim_count();
+    return ret >>> 0;
+}
+
+/**
+ * Hands the simulation's current particles to a viewport (as set_particles would).
+ * @param {number} id
+ */
+export function sim_draw(id) {
+    const ret = wasm.sim_draw(id);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * @returns {number}
+ */
+export function sim_emitters() {
+    const ret = wasm.sim_emitters();
+    return ret >>> 0;
+}
+
+/**
+ * A new simulation (no emitters, time 0) with this random seed; added effects stay.
+ * @param {number} seed
+ */
+export function sim_reset(seed) {
+    wasm.sim_reset(seed);
+}
+
+/**
+ * @param {boolean} on
+ */
+export function sim_set_floor(on) {
+    wasm.sim_set_floor(on);
+}
+
+/**
+ * Block collision: one byte per cell (non-zero = solid), x fastest, then z, then y.
+ * @param {number} ox
+ * @param {number} oy
+ * @param {number} oz
+ * @param {number} sx
+ * @param {number} sy
+ * @param {number} sz
+ * @param {Uint8Array | number[]} cells
+ */
+export function sim_set_solid(ox, oy, oz, sx, sy, sz, cells) {
+    const val2 = +ox;
+    const val3 = +oy;
+    const val4 = +oz;
+    const val5 = +sx;
+    const val6 = +sy;
+    const val7 = +sz;
+    const ptr0 = passArray8ToWasm0(cells, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    wasm.sim_set_solid(val2, val3, val4, val5, val6, val7, ptr0, len0);
+}
+
+/**
+ * The texture (an added asset path, as a particle's "texture") an effect's particles are drawn with; none skips them.
+ * @param {string} effect
+ * @param {string | null} [texture]
+ */
+export function sim_set_texture(effect, texture) {
+    let ptr0, len0, ptr1, len1;
+    try {
+        ptr0 = passStringToWasm0(effect, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = isLikeNone(texture) ? 0 : passStringToWasm0(texture, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len1 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+        throw e;
+    }
+    wasm.sim_set_texture(ptr0, len0, ptr1, len1);
+}
+
+/**
+ * @param {number} d
+ */
+export function sim_set_view_distance(d) {
+    wasm.sim_set_view_distance(d);
+}
+
+/**
+ * Starts an added effect at a world point; vars is a JSON object of script variables. False when it is not added.
+ * @param {string} effect
+ * @param {number} x
+ * @param {number} y
+ * @param {number} z
+ * @param {string} vars
+ * @returns {boolean}
+ */
+export function sim_spawn(effect, x, y, z, vars) {
+    const val3 = +x;
+    const val4 = +y;
+    const val5 = +z;
+    let ptr0, len0, ptr1, len1;
+    try {
+        ptr0 = passStringToWasm0(effect, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = passStringToWasm0(vars, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        len1 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+        throw e;
+    }
+    const ret = wasm.sim_spawn(ptr0, len0, val3, val4, val5, ptr1, len1);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] !== 0;
+}
+
+/**
+ * One game tick of dt seconds (clamped to 0.1 as the game does).
+ * @param {number} dt
+ */
+export function sim_step(dt) {
+    wasm.sim_step(dt);
+}
+
+/**
+ * @returns {number}
+ */
+export function sim_time() {
+    const ret = wasm.sim_time();
+    return ret;
+}
+
+/**
+ * The simulator's warnings since the last call.
+ * @returns {string[]}
+ */
+export function sim_warnings() {
+    const ret = wasm.sim_warnings();
+    var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]);
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
  * @returns {string[]}
  */
 export function take_warnings() {
@@ -1481,23 +1660,23 @@ function __wbg_get_imports() {
             arg0.writeTexture(arg1, getArrayU8FromWasm0(arg2, arg3), arg4, arg5);
         }, arguments); },
         __wbindgen_generic_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 483, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 571, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true_);
             return ret;
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDevice")], shim_idx: 417, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDevice")], shim_idx: 505, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true_);
             return ret;
         },
         __wbindgen_generic_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("any")], shim_idx: 417, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__31);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("any")], shim_idx: 505, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__45);
             return ret;
         },
         __wbindgen_generic_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("undefined")], shim_idx: 417, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__32);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("undefined")], shim_idx: 505, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__46);
             return ret;
         },
         __wbindgen_generic_0000000000000005: function(arg0) {
@@ -1551,15 +1730,15 @@ function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bin
     }
 }
 
-function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__31(arg0, arg1, arg2) {
-    const ret = wasm.wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__31(arg0, arg1, arg2);
+function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__45(arg0, arg1, arg2) {
+    const ret = wasm.wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__45(arg0, arg1, arg2);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
 }
 
-function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__32(arg0, arg1, arg2) {
-    const ret = wasm.wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__32(arg0, arg1, arg2);
+function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__46(arg0, arg1, arg2) {
+    const ret = wasm.wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__46(arg0, arg1, arg2);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }

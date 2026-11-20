@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Publishes the built fork to stirante.com/snowstorm/ (bucket stirante.com behind CloudFront and nginx).
-# Run `npx mix --production` (and tools/build-vendor.sh after renderer / particle-sim changes) first.
+# Run `npx mix --production` (and tools/build-vendor.sh after renderer changes) first.
 # Nothing is fingerprinted, so every file is revalidated on each visit.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -15,8 +15,6 @@ put icon_full.png "image/png"
 put dist/app.js "text/javascript"
 put vendor/renderer/bedrock_renderer_web.js "text/javascript"
 put vendor/renderer/bedrock_renderer_web_bg.wasm "application/wasm"
-put vendor/particle-sim/wasm_exec.js "text/javascript"
-put vendor/particle-sim/particle-sim.wasm "application/wasm"
 put scans/scans.json "application/json"
 for f in scans/*.mcstructure scans/*.solid; do put "$f" "application/octet-stream"; done
 if [ -d dist/images ]; then

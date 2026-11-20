@@ -17,6 +17,29 @@ export function position() {
 	return [x + Orbit.distance * c * Math.sin(Orbit.yaw), y + Orbit.distance * Math.sin(Orbit.pitch), z + Orbit.distance * c * Math.cos(Orbit.yaw)];
 }
 
+function seesTarget(solid) {
+	let p = position(), t = Orbit.target;
+	for (let k = 0.05; k <= 1; k += 0.025) {
+		if (solid(...[0, 1, 2].map(i => Math.floor(t[i] + (p[i] - t[i]) * k)))) return false;
+	}
+	return true;
+}
+
+// When blocks stand between the camera and the target (a scanned area), turns and then raises it to the first clear view.
+export function unblock(solid) {
+	if (seesTarget(solid)) return;
+	let {yaw, pitch} = Orbit;
+	for (let up = 0; up < 7; up++) {
+		for (let turn = 0; turn < 8; turn++) {
+			Orbit.yaw = yaw + turn * Math.PI / 4;
+			Orbit.pitch = Math.min(1.5, pitch + up * 0.2);
+			if (seesTarget(solid)) return;
+		}
+	}
+	Orbit.yaw = yaw;
+	Orbit.pitch = 1.5;
+}
+
 export function camera() {
 	return {pos: position(), look_at: [...Orbit.target], fov: Orbit.fov};
 }

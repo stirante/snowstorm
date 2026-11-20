@@ -1,11 +1,11 @@
-// The preview: particle-sim (the game's particle rules, Go on molang-go) simulates the effect and bedrock-renderer
-// (the game's Fancy / Vibrant Visuals pipelines, WebGPU) draws the whole view on the preview canvas: the environment,
-// the guides and the particles. The camera is orbit.js.
+// The preview: bedrock-renderer simulates the effect (particle-sim, the game's particle rules, built into its WASM)
+// and draws it with the game's Fancy / Vibrant Visuals pipelines (WebGPU) on the preview canvas, with the environment
+// and the guides. The camera is orbit.js.
 import {generateFile} from './export'
 import {Config, Scene} from './emitter'
 import {EventSubEffects} from './event_sub_effects'
 import {OptionValues} from './options'
-import {Orbit, camera} from './orbit'
+import {Orbit, camera, unblock} from './orbit'
 
 const FX = '/fx';
 const VANILLA = '/v';
@@ -54,7 +54,7 @@ export const Game = {
 	particles: 0,
 };
 
-let sim = null, br = null, viewport = null, canvas = null, view = null;
+let br = null, viewport = null, canvas = null, view = null;
 let effectText = '', effectId = '', textures = {}, idle = 0, opening = null, sceneKey = '';
 let scans = null;
 const tried = new Set();
@@ -87,23 +87,6 @@ function storedTime() {
 }
 const local = file => new URL(file, document.baseURI).href;
 
-function loadScript(src) {
-	return new Promise((resolve, reject) => {
-		let s = document.createElement('script');
-		s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('cannot load ' + src));
-		document.head.append(s);
-	});
-}
-
-async function loadSim() {
-	if (!window.Go) await loadScript(local('vendor/particle-sim/wasm_exec.js'));
-	let go = new window.Go();
-	let bytes = await (await fetch(local('vendor/particle-sim/particle-sim.wasm'))).arrayBuffer();
-	let {instance} = await WebAssembly.instantiate(bytes, go.importObject);
-	go.run(instance);
-	return window.particleSim;
-}
-
 async function loadRenderer() {
 	let mod = await import(/* webpackIgnore: true */ local('vendor/renderer/bedrock_renderer_web.js'));
 	await mod.default();
@@ -134,7 +117,6 @@ export async function setEngine(engine) {
 	}
 	Game.status = 'Loading the game renderer…';
 	try {
-		if (!sim) sim = await loadSim();
 		if (!br) br = await loadRenderer();
 		if (!scans) scans = await loadScans();
 		effectText = '';
@@ -254,6 +236,7 @@ async function openViewport() {
 		viewport = br.open(canvas, text, SCANS);
 		sentCamera = '';
 		await applyCollision();
+		await unblockCamera();
 	})();
 	try { await opening; } finally { opening = null; }
 }
@@ -283,13 +266,23 @@ async function solidOf(name) {
 	return solids[name];
 }
 
+async function unblockCamera() {
+	let env = environment();
+	if (!env.scan || !scans[env.id]) return;
+	let {origin, size} = scans[env.id], cells = await solidOf(env.id);
+	unblock((x, y, z) => {
+		let [i, j, k] = [x - origin[0], y - origin[1], z - origin[2]];
+		return i >= 0 && j >= 0 && k >= 0 && i < size[0] && j < size[1] && k < size[2] && cells[i + size[0] * (k + size[2] * j)] !== 0;
+	});
+}
+
 async function applyCollision() {
 	let env = environment();
-	sim.setFloor(Game.collision && !env.scan);
-	sim.setSolid(null);
+	br.sim_set_floor(Game.collision && !env.scan);
+	br.sim_clear_solid();
 	if (env.scan && Game.collision && scans[env.id]) {
 		let {origin, size} = scans[env.id];
-		sim.setSolid(...origin, ...size, await solidOf(env.id));
+		br.sim_set_solid(...origin, ...size, await solidOf(env.id));
 	}
 }
 
@@ -319,6 +312,7 @@ async function uploadTextures() {
 		c.getContext('2d').drawImage(img, 0, 0);
 		let blob = await new Promise(r => c.toBlob(r, 'image/png'));
 		br.add_asset(FX + '/' + textureKey(id) + '.png', new Uint8Array(await blob.arrayBuffer()));
+		br.sim_set_texture(id, textureKey(id));
 		textures[id] = img.src;
 	}
 }
@@ -375,90 +369,35 @@ function syncEffect() {
 	if (text + subs === effectText) return false;
 	effectText = text + subs;
 	let errors = [];
+	let add = (json, label) => { try { return br.sim_add(json); } catch (e) { errors.push(label + (e.message || String(e))); return ''; } };
+	effectId = add(text, '');
 	for (let id in EventSubEffects) {
 		let json = EventSubEffects[id]?.json;
-		let r = json && sim.add(JSON.stringify(json));
-		if (r && r.error) errors.push(id + ': ' + r.error);
+		if (json) add(JSON.stringify(json), id + ': ');
 	}
-	let r = sim.add(text);
-	effectId = r.id || '';
-	if (r.error) errors.unshift(r.error);
 	restart();
 	Game.warnings.unshift(...errors);
 	return true;
 }
 
 export function restart() {
-	if (!sim) return;
-	sim.reset(1);
+	if (!br) return;
+	br.sim_reset(1);
 	Game.elapsed = 0;
 	idle = 0;
 	Game.warnings = Game.warnings.filter(w => w.startsWith('Renderer: '));
 	applyCollision().catch(e => { Game.status = e.message || String(e); });
-	if (effectId) sim.spawn(effectId, 0, 0, 0, JSON.stringify(vars()));
+	if (effectId) br.sim_spawn(effectId, 0, 0, 0, JSON.stringify(vars()));
 	collectWarnings();
 }
 
 function collectWarnings() {
-	let found = JSON.parse(sim.warnings()) || [];
-	if (br) for (let w of br.take_warnings()) if (!/^(sky|sun|moon|cloud)/i.test(w)) found.push('Renderer: ' + w);
+	let found = br.sim_warnings();
+	for (let w of br.take_warnings()) if (!/^(sky|sun|moon|cloud)/i.test(w)) found.push('Renderer: ' + w);
 	for (let w of found) if (!Game.warnings.includes(w)) Game.warnings.push(w);
 }
 
-const PLANES = {emitter_transform_xy: [0, 0, 1], emitter_transform_xz: [0, 1, 0], emitter_transform_yz: [1, 0, 0]};
-const BASE_MATERIALS = ['particles_alpha', 'particles_opaque', 'particles_blend', 'particles_add'];
-
-const CAMERA = 0, DIRECTION = 1, AXIS = 2;
-
-// The renderer's facing (CAMERA / DIRECTION / AXIS), direction and extra roll for a facing_camera_mode.
-function facing(mode, d) {
-	if (!mode || mode === 'rotate_xyz' || mode === 'lookat_xyz') return [CAMERA, [0, 0, 0], 0];
-	if (mode === 'rotate_y' || mode === 'lookat_y') return [AXIS, [0, 1, 0], 0];
-	if (PLANES[mode]) return [DIRECTION, PLANES[mode], 0];
-	if (d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < 1e-8) return [CAMERA, [0, 0, 0], 0];
-	if (mode === 'direction_z') return [DIRECTION, d, 0];
-	return [AXIS, d, mode === 'direction_x' || mode === 'lookat_direction' ? 90 : 0];
-}
-
-const clamp01 = x => Math.min(1, Math.max(0, x));
-const STRIDE = 21;
-let packed = new Float32Array(0);
 let sentCamera = '';
-
-// The string table the renderer gets: each simulator string index -> renderer index (texture or material).
-function rendererStrings(strings) {
-	let out = [], texture = [], material = [];
-	let add = s => { let i = out.indexOf(s); if (i < 0) { i = out.length; out.push(s); } return i; };
-	strings.forEach((s, i) => {
-		texture[i] = textures[s] ? add(textureKey(s)) : -1;
-		material[i] = add(BASE_MATERIALS.includes(s) ? s : 'particles_blend');
-	});
-	return {out, texture, material};
-}
-
-// Writes quad i of particleSim.quadsPacked() (particle-sim's PackQuads layout) at o in the renderer's packed
-// layout (bedrock-renderer's particles_packed); false when the game would not draw it.
-function packQuad(d, i, o, table, strings) {
-	let texture = table.texture[d[i + 23]];
-	if (texture < 0 || !(Math.abs(d[i + 3]) > 1e-4 && Math.abs(d[i + 4]) > 1e-4)) return false;
-	for (let k of [0, 1, 2, 5, 6, 7, 8, 13]) if (!Number.isFinite(d[i + k])) return false;
-	let [kind, dir, turn] = facing(strings[d[i + 21]], [d[i + 14], d[i + 15], d[i + 16]]);
-	let q = [d[i], d[i + 1], d[i + 2], Math.abs(d[i + 3]), Math.abs(d[i + 4]), d[i + 5], d[i + 6], d[i + 7], d[i + 8],
-		clamp01(d[i + 9]), clamp01(d[i + 10]), clamp01(d[i + 11]), clamp01(d[i + 12]), d[i + 13] + turn, d[i + 19] ? 0 : 1,
-		kind, dir[0], dir[1], dir[2], texture, table.material[d[i + 22]]];
-	if (!q.every(Number.isFinite)) return false;
-	packed.set(q, o);
-	return true;
-}
-
-function sendParticles() {
-	let {data, strings, stride} = sim.quadsPacked();
-	let n = Math.floor(data.length / stride);
-	if (packed.length < n * STRIDE) packed = new Float32Array(n * STRIDE * 2);
-	let table = rendererStrings(strings), o = 0;
-	for (let i = 0; i < n * stride; i += stride) if (packQuad(data, i, o, table, strings)) o += STRIDE;
-	br.set_particles_packed(viewport, packed.subarray(0, o), table.out);
-}
 
 function draw() {
 	let [w, h] = canvasSize();
@@ -471,27 +410,27 @@ function draw() {
 		br.set_camera(viewport, cam);
 		sentCamera = cam;
 	}
-	sendParticles();
+	br.sim_draw(viewport);
 	br.render(viewport);
 }
 
 // One drawn frame: the game ticks once per frame with the real frame time (clamped to 0.1 s by the simulator).
 export function frame(dt) {
-	if (!sim || viewport == null || opening) return;
+	if (!br || viewport == null || opening) return;
 	if (syncEffect() || texturesChanged() || currentKey() !== sceneKey) {
 		reopen();
 		return;
 	}
 	if (!Game.paused) {
-		sim.setViewDistance(Orbit.distance);
-		sim.step(dt);
+		br.sim_set_view_distance(Orbit.distance);
+		br.sim_step(dt);
 		Game.elapsed += dt;
-		if (sim.emitters() === 0 && Game.loop_mode !== 'once') {
+		if (br.sim_emitters() === 0 && Game.loop_mode !== 'once') {
 			idle += dt;
 			if (Game.loop_mode === 'looping' || idle > 0.6) restart();
 		} else idle = 0;
 	}
-	Game.particles = sim.count();
+	Game.particles = br.sim_count();
 	collectWarnings();
 	draw();
 }
