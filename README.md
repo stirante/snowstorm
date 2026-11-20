@@ -4,7 +4,9 @@
 > them: [particle-sim](https://github.com/stirante/particle-sim) (the game's particle rules on molang-go, as WASM)
 > simulates the effect and bedrock-renderer (the game's Fancy and Vibrant Visuals pipelines, WebGPU) draws the whole
 > view; three.js only keeps the orbit camera. The footer picks Fancy or Vibrant Visuals, the environment (a grid, a
-> grass floor or a scanned vanilla area with block collision) and the time of day. The View menu's grid, axes,
+> grass floor or a scanned vanilla area with block collision), the render resolution (Smooth = 2x supersampling)
+> and the time of day. MER opens the effect's Vibrant Visuals texture set (uniform MERS values or a MER / MERS image),
+> which can be downloaded as the pack's `.texture_set.json`. The View menu's grid, axes,
 > reference block and player are drawn by the renderer. The simulator's warnings (the game's particle caps, local
 > space quirks, effects it cannot read) are listed in the warnings dialog.
 > Code: `src/game_preview.js`, `src/components/Preview.vue`; `vendor/` holds the two WASM modules

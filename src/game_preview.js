@@ -24,8 +24,26 @@ export const ENVIRONMENTS = [
 	{id: 'swamp', label: 'Swamp', scan: true},
 ];
 
+export const QUALITIES = [
+	{id: 'fast', label: 'Fast', title: 'One pixel per CSS pixel'},
+	{id: 'sharp', label: 'Sharp', title: 'One pixel per screen pixel'},
+	{id: 'smooth', label: 'Smooth', title: 'Twice the screen pixels, scaled down (antialiasing)'},
+];
+const MAX_SIDE = 4096;
+
+// The edited effect's Vibrant Visuals texture set: none, uniform MERS values (0-255) or a MER / MERS image.
+export const Mers = {
+	mode: stored('snowstorm_mers_mode', 'none'),
+	values: storedValues(),
+	subsurface: false,
+	image: null,
+	image_name: '',
+	version: 0,
+};
+
 export const Game = {
 	engine: storedEngine(),
+	quality: stored('snowstorm_quality', 'sharp'),
 	environment: stored('snowstorm_environment', 'grid'),
 	time: storedTime(),
 	status: '',
@@ -52,6 +70,13 @@ function store(key, value) {
 function storedEngine() {
 	let v = stored('snowstorm_engine', 'fancy');
 	return MODES.includes(v) ? v : 'fancy';
+}
+function storedValues() {
+	try {
+		let v = JSON.parse(localStorage.getItem('snowstorm_mers_values'));
+		if (Array.isArray(v) && v.length === 4 && v.every(Number.isFinite)) return v;
+	} catch (e) {}
+	return [0, 0, 255, 0];
 }
 function storedTime() {
 	let t = parseFloat(stored('snowstorm_time', '0'));
@@ -127,6 +152,18 @@ export async function setEnvironment(id) {
 	await reopen();
 }
 
+export function setQuality(q) {
+	Game.quality = q;
+	store('snowstorm_quality', q);
+}
+
+export function setMers(changes) {
+	Object.assign(Mers, changes);
+	Mers.version++;
+	store('snowstorm_mers_mode', Mers.mode);
+	store('snowstorm_mers_values', JSON.stringify(Mers.values));
+}
+
 export function setTime(t) {
 	Game.time = t;
 	store('snowstorm_time', String(t));
@@ -164,14 +201,15 @@ function sceneObject() {
 
 // What the open viewport was built from: when it changes (environment, View menu toggles) the viewport is rebuilt.
 function currentKey() {
-	return JSON.stringify([Game.environment, guides(), OptionValues.minecraft_block_visible]);
+	return JSON.stringify([Game.environment, guides(), OptionValues.minecraft_block_visible, Mers.version, Config.identifier]);
 }
 
 function canvasSize() {
-	let dpr = Math.min(window.devicePixelRatio || 1, 2);
-	if (Game.engine === 'vibrant' && dpr > 1.5) dpr = 1;
+	let dpr = Math.min(window.devicePixelRatio || 1, 3);
+	let scale = {fast: 1, sharp: dpr, smooth: dpr * 2}[Game.quality] || dpr;
 	let w = canvas.clientWidth || 300, h = canvas.clientHeight || 200;
-	return [Math.max(16, Math.round(w * dpr)), Math.max(16, Math.round(h * dpr))];
+	scale = Math.min(scale, MAX_SIDE / Math.max(w, h));
+	return [Math.max(16, Math.round(w * scale)), Math.max(16, Math.round(h * scale))];
 }
 
 function remoteUrl(path) {
@@ -202,6 +240,7 @@ async function openViewport() {
 	if (opening) return opening;
 	opening = (async () => {
 		await uploadTextures();
+		writeTextureSet();
 		sceneKey = currentKey();
 		let scene = sceneObject();
 		let text = JSON.stringify(scene);
@@ -210,7 +249,6 @@ async function openViewport() {
 		Game.status = '';
 		[canvas.width, canvas.height] = scene.size;
 		viewport = br.open(canvas, text, SCANS);
-		for (let w of br.take_warnings()) console.warn('renderer:', w);
 		await applyCollision();
 	})();
 	try { await opening; } finally { opening = null; }
@@ -218,6 +256,7 @@ async function openViewport() {
 
 async function reopen() {
 	closeViewport();
+	Game.warnings = Game.warnings.filter(w => !w.startsWith('Renderer: '));
 	try {
 		await openViewport();
 	} catch (e) {
@@ -280,6 +319,35 @@ async function uploadTextures() {
 	}
 }
 
+function mersKey(values) {
+	return values[3] > 0 || Mers.subsurface ? 'metalness_emissive_roughness_subsurface' : 'metalness_emissive_roughness';
+}
+
+function textureSetJSON(color, mers) {
+	let set = {color};
+	if (Mers.mode === 'uniform') set[mersKey(Mers.values)] = Mers.values[3] > 0 ? Mers.values : Mers.values.slice(0, 3);
+	if (Mers.mode === 'image' && Mers.image) set[mersKey([0, 0, 0, 0])] = mers;
+	return {format_version: '1.21.30', 'minecraft:texture_set': set};
+}
+
+// The renderer reads <texture>.texture_set.json next to a particle texture (Vibrant Visuals only).
+function writeTextureSet() {
+	if (!Config.identifier) return;
+	let base = FX + '/' + textureKey(Config.identifier), name = base.split('/').pop();
+	br.remove_asset(base + '.texture_set.json');
+	br.remove_asset(base + '_mers.png');
+	if (Mers.mode === 'none' || (Mers.mode === 'image' && !Mers.image)) return;
+	if (Mers.mode === 'image') br.add_asset(base + '_mers.png', Mers.image);
+	br.add_asset(base + '.texture_set.json', new TextEncoder().encode(JSON.stringify(textureSetJSON(name, name + '_mers'))));
+}
+
+// The texture set for the pack: named after the effect's texture, its MER(S) image as <texture>_mer(s).png.
+export function exportTextureSet() {
+	let name = (Config.particle_texture_path || 'textures/particle/particle').split('/').pop() || 'particle';
+	let mers = name + (mersKey(Mers.values).endsWith('subsurface') ? '_mers' : '_mer');
+	return {name, mers, json: JSON.stringify(textureSetJSON(name, mers), null, 2)};
+}
+
 function texturesChanged() {
 	for (let [id, config] of Object.entries(configs())) {
 		let img = imageOf(config);
@@ -321,14 +389,16 @@ export function restart() {
 	sim.reset(1);
 	Game.elapsed = 0;
 	idle = 0;
-	Game.warnings = [];
+	Game.warnings = Game.warnings.filter(w => w.startsWith('Renderer: '));
 	applyCollision().catch(e => { Game.status = e.message || String(e); });
 	if (effectId) sim.spawn(effectId, 0, 0, 0, JSON.stringify(vars()));
 	collectWarnings();
 }
 
 function collectWarnings() {
-	for (let w of JSON.parse(sim.warnings()) || []) if (!Game.warnings.includes(w)) Game.warnings.push(w);
+	let found = JSON.parse(sim.warnings()) || [];
+	if (br) for (let w of br.take_warnings()) if (!/^(sky|sun|moon|cloud)/i.test(w)) found.push('Renderer: ' + w);
+	for (let w of found) if (!Game.warnings.includes(w)) Game.warnings.push(w);
 }
 
 const PLANES = {emitter_transform_xy: [0, 0, 1], emitter_transform_xz: [0, 1, 0], emitter_transform_yz: [1, 0, 0]};

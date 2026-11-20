@@ -4,6 +4,31 @@
             <div id="overlay_timestamp">{{ timestamp }}</div>
             <canvas id="canvas" @click="blur()" ref="canvas"></canvas>
             <div id="game_status" v-if="game.status">{{ game.status }}</div>
+            <div class="mers_panel" v-if="show_mers">
+                <div class="mers_head">
+                    <span>Texture set (Vibrant Visuals)</span>
+                    <div class="tool" @click="show_mers = false"><X :size="18" /></div>
+                </div>
+                <select v-model="mers.mode" @change="mersChanged()">
+                    <option value="none">No texture set</option>
+                    <option value="uniform">Uniform MERS</option>
+                    <option value="image">MER / MERS image</option>
+                </select>
+                <template v-if="mers.mode == 'uniform'">
+                    <label v-for="(name, i) in ['Metalness', 'Emissive', 'Roughness', 'Subsurface']" :key="name" class="mers_row">
+                        <span>{{ name }}</span>
+                        <input type="range" min="0" max="255" step="1" :value="mers.values[i]" @input="mersValue(i, $event)" @change="mersChanged()">
+                        <span class="mers_value">{{ mers.values[i] }}</span>
+                    </label>
+                </template>
+                <template v-if="mers.mode == 'image'">
+                    <input type="file" accept="image/png" @change="loadMersImage($event)">
+                    <div v-if="mers.image_name" class="mers_note">{{ mers.image_name }}</div>
+                    <label class="mers_row"><input type="checkbox" v-model="mers.subsurface" @change="mersChanged()"> Alpha is subsurface (MERS)</label>
+                </template>
+                <div class="mers_note" v-if="engine != 'vibrant'">Only Vibrant Visuals uses the texture set.</div>
+                <button v-if="mers.mode != 'none'" @click="downloadTextureSet()">Download texture set</button>
+            </div>
             <div class="placeholder_bar" v-if="show_placeholder_bar">
                 <ul>
                     <li v-for="(key) in placeholder_keys" :key="key">
@@ -39,6 +64,10 @@
             <select id="environment" v-model="environment" @change="changeEnvironment()" title="Environment">
                 <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.label }}</option>
             </select>
+            <select id="quality" v-model="quality" @change="changeQuality()" title="Render resolution">
+                <option v-for="q in qualities" :key="q.id" :value="q.id" :title="q.title">{{ q.label }}</option>
+            </select>
+            <div class="tool" :class="{toggle_enabled: show_mers}" @click="show_mers = !show_mers" title="Vibrant Visuals texture set (MER / MERS)" style="width: auto; padding: 0 8px;">MER</div>
             <input class="time_slider" type="range" min="0" max="1" step="0.005" :value="(game.time + 0.5) % 1" @input="changeTime($event)" :title="'Time of day ' + clock">
             <div class="tool ground_collision" :class="{toggle_enabled: collision}" @click="toggleCollision()" title="Preview Collisions">
                 <FlipVertical2 :size="20" v-if="collision" />
@@ -90,7 +119,7 @@
     } from 'lucide-vue'
     import {EditListeners} from '../edits'
     import {updateVariablePlaceholderList, bakePlaceholderVariable} from './../variable_placeholders'
-    import { Game, ENVIRONMENTS, initGame, setEngine, setEnvironment, setTime, frame, restart, screenshotURL } from '../game_preview';
+    import { Game, Mers, ENVIRONMENTS, QUALITIES, initGame, setEngine, setEnvironment, setQuality, setMers, exportTextureSet, setTime, frame, restart, screenshotURL } from '../game_preview';
     import { attach } from '../orbit';
 
     const View = {
@@ -130,6 +159,16 @@
         if (is_ff) document.body.appendChild(download);
         download.click();
         if (is_ff) document.body.removeChild(download);
+    }
+
+    function saveFile(name, blob) {
+        let a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     }
 
     function startAnimation() {
@@ -189,6 +228,10 @@
             engine: Game.engine,
             environment: Game.environment,
             environments: ENVIRONMENTS,
+            quality: Game.quality,
+            qualities: QUALITIES,
+            show_mers: false,
+            mers: Mers,
             game: Game
         }},
         components: {
@@ -236,6 +279,25 @@
             async changeEngine() {
                 await setEngine(this.engine);
                 this.engine = Game.engine;
+            },
+            changeQuality() {
+                setQuality(this.quality);
+            },
+            mersValue(i, event) {
+                this.$set(this.mers.values, i, parseInt(event.target.value) || 0);
+            },
+            mersChanged() {
+                setMers({});
+            },
+            async loadMersImage(event) {
+                let file = event.target.files[0];
+                if (!file) return;
+                setMers({image: new Uint8Array(await file.arrayBuffer()), image_name: file.name});
+            },
+            downloadTextureSet() {
+                let {name, mers, json} = exportTextureSet();
+                saveFile(name + '.texture_set.json', new Blob([json], {type: 'application/json'}));
+                if (this.mers.mode == 'image' && this.mers.image) saveFile(mers + '.png', new Blob([this.mers.image], {type: 'image/png'}));
             },
             changeEnvironment() {
                 setEnvironment(this.environment);
@@ -318,6 +380,49 @@
 	}
     #canvas_wrapper {
         background-color: #29323a;
+    }
+    .mers_panel {
+        position: absolute;
+        right: 8px;
+        bottom: 8px;
+        width: 260px;
+        max-width: calc(100% - 16px);
+        padding: 8px 10px;
+        background-color: var(--color-bar);
+        border: 1px solid var(--color-border);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        z-index: 2;
+    }
+    .mers_head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .mers_row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .mers_row > span:first-child {
+        width: 78px;
+    }
+    .mers_row input[type=range] {
+        flex: 1;
+        appearance: auto;
+        -webkit-appearance: auto;
+        padding: 0;
+        background: transparent;
+        border: none;
+    }
+    .mers_value {
+        width: 28px;
+        text-align: right;
+    }
+    .mers_note {
+        opacity: 0.7;
+        font-size: 0.9em;
     }
     #game_status {
         position: absolute;
