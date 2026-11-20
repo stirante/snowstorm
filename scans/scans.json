@@ -1,0 +1,86 @@
+[
+ {
+  "name": "plains",
+  "size": [
+   64,
+   64,
+   64
+  ],
+  "origin": [
+   -29,
+   -17,
+   -35
+  ],
+  "biome": "minecraft:plains"
+ },
+ {
+  "name": "cherry_grove",
+  "size": [
+   64,
+   64,
+   64
+  ],
+  "origin": [
+   -29,
+   -17,
+   -35
+  ],
+  "biome": "minecraft:cherry_grove"
+ },
+ {
+  "name": "desert",
+  "size": [
+   64,
+   64,
+   64
+  ],
+  "origin": [
+   -29,
+   -17,
+   -35
+  ],
+  "biome": "minecraft:desert"
+ },
+ {
+  "name": "snowy_plains",
+  "size": [
+   64,
+   64,
+   64
+  ],
+  "origin": [
+   -29,
+   -17,
+   -35
+  ],
+  "biome": "minecraft:ice_plains"
+ },
+ {
+  "name": "jungle",
+  "size": [
+   64,
+   64,
+   64
+  ],
+  "origin": [
+   -29,
+   -17,
+   -35
+  ],
+  "biome": "minecraft:jungle"
+ },
+ {
+  "name": "swamp",
+  "size": [
+   64,
+   64,
+   64
+  ],
+  "origin": [
+   -29,
+   -17,
+   -35
+  ],
+  "biome": "minecraft:swampland"
+ }
+]

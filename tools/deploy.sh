@@ -17,6 +17,8 @@ put vendor/renderer/bedrock_renderer_web.js "text/javascript"
 put vendor/renderer/bedrock_renderer_web_bg.wasm "application/wasm"
 put vendor/particle-sim/wasm_exec.js "text/javascript"
 put vendor/particle-sim/particle-sim.wasm "application/wasm"
+put scans/scans.json "application/json"
+for f in scans/*.mcstructure scans/*.solid; do put "$f" "application/octet-stream"; done
 if [ -d dist/images ]; then
   aws s3 cp dist/images "$DEST/dist/images" --recursive --cache-control "$CACHE" --only-show-errors
 fi

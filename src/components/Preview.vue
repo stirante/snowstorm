@@ -32,10 +32,13 @@
                 <option value="entity">Entity</option>
                 <option value="locator">Locator</option>
             </select>
-            <select id="engine" v-model="engine" @change="changeEngine()" title="Simulation and look: particle-sim + the game's renderer, or Wintersky">
-                <option value="fancy" :disabled="!webgpu">Game: Fancy</option>
-                <option value="vibrant" :disabled="!webgpu">Game: Vibrant Visuals</option>
-                <option value="wintersky">Wintersky</option>
+            <select id="engine" v-model="engine" @change="changeEngine()" title="Graphics mode of the game's renderer">
+                <option value="fancy" v-if="webgpu">Fancy</option>
+                <option value="vibrant" v-if="webgpu">Vibrant Visuals</option>
+                <option value="wintersky" v-if="!webgpu">Wintersky (no WebGPU)</option>
+            </select>
+            <select id="environment" v-if="engine != 'wintersky'" v-model="environment" @change="changeEnvironment()" title="Environment">
+                <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.label }}</option>
             </select>
             <input v-if="engine != 'wintersky'" class="time_slider" type="range" min="0" max="1" step="0.005" :value="(game.time + 0.5) % 1" @input="changeTime($event)" :title="'Time of day ' + clock">
             <div class="tool ground_collision" :class="{toggle_enabled: collision}" @click="toggleCollision()" title="Preview Collisions">
@@ -57,7 +60,6 @@
 
             <div class="spacing" />
 
-            <div class="tool warning" v-if="engine != 'wintersky' && game.warnings.length" :title="game.warnings.join(' | ')"><i class="unicode_icon warn">⚙</i>{{ game.warnings.length }}</div>
             <div class="tool warning" @click="$emit('opendialog', 'warnings')" v-if="warning_count" :title="getWarningTitle()"><i class="unicode_icon warn">⚠</i>{{ warning_count }}</div>
             <div class="stat">{{particle_counter}} P</div>
             <div class="stat" style="width: 66px;">{{fps}} FPS</div>
@@ -92,7 +94,7 @@
     import {EditListeners} from '../edits'
     import {updateVariablePlaceholderList, bakePlaceholderVariable} from './../variable_placeholders'
     import { createReferenceBlock, createReferencePlayer } from '../references.ts';
-    import { Game, initGame, setEngine, setTime, frame, restart, isGame } from '../game_preview';
+    import { Game, ENVIRONMENTS, initGame, setEngine, setEnvironment, setTime, frame, restart, isGame, screenshotURL } from '../game_preview';
 
     let BACKGROUND_COLOR = 0x29323a;
  
@@ -159,7 +161,7 @@
         let color = new THREE.Color(BACKGROUND_COLOR);
         View.renderer.setClearColor(color, 0);
         View.renderer.render(View.scene, View.camera);
-        let dataurl = View.canvas.toDataURL()
+        let dataurl = screenshotURL() || View.canvas.toDataURL()
         View.renderer.setClearColor(color);
 
         let is_ff = navigator.userAgent.toLowerCase().indexOf('firefox') > -1
@@ -243,7 +245,10 @@
             }
         }
 
-        if (View.canvas.offsetParent && (!Emitter.paused || !document.hasFocus || document.hasFocus())) {
+        if (isGame()) {
+            if (View.canvas.offsetParent) View.frames_this_second++;
+            stats.time = Game.elapsed;
+        } else if (View.canvas.offsetParent && (!Emitter.paused || !document.hasFocus || document.hasFocus())) {
             View.controls.update()
             Scene.updateFacingRotation(View.camera);
             View.renderer.render(View.scene, View.camera);
@@ -296,6 +301,8 @@
             show_placeholder_bar: localStorage.getItem('snowstorm_show_placeholder_bar') == 'true',
             bake_placeholder_key: null,
             engine: Game.engine,
+            environment: Game.environment,
+            environments: ENVIRONMENTS,
             webgpu: !!navigator.gpu,
             game: Game
         }},
@@ -347,6 +354,9 @@
             async changeEngine() {
                 await setEngine(this.engine);
                 this.engine = Game.engine;
+            },
+            changeEnvironment() {
+                setEnvironment(this.environment);
             },
             changeTime(event) {
                 setTime(parseFloat(event.target.value) - 0.5);
@@ -430,6 +440,12 @@
         top: 0;
         left: 0;
         pointer-events: none;
+    }
+    #canvas_wrapper.game_mode {
+        background-color: #29323a;
+    }
+    #canvas_wrapper.game_mode canvas#canvas {
+        opacity: 0;
     }
     #game_status {
         position: absolute;

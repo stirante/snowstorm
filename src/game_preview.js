@@ -1,15 +1,31 @@
-// The game preview: particle-sim (the game's particle rules, Go on molang-go) simulates the effect and
-// bedrock-renderer (the game's Fancy / Vibrant Visuals pipelines, WebGPU) draws its particles on a transparent
-// canvas over the three.js view, which keeps the grid, axes and reference models. Engine 'wintersky' is the original.
+// The preview: particle-sim (the game's particle rules, Go on molang-go) simulates the effect and bedrock-renderer
+// (the game's Fancy / Vibrant Visuals pipelines, WebGPU) draws the whole view: the environment, the guides and the
+// particles. three.js only keeps the orbit camera. Wintersky remains only for browsers without WebGPU.
 import {generateFile} from './export'
 import {Config, Scene} from './emitter'
 import {EventSubEffects} from './event_sub_effects'
+import {OptionValues} from './options'
 
-const BASE = '/snow';
-const ENGINES = ['fancy', 'vibrant', 'wintersky'];
+const FX = '/fx';
+const VANILLA = '/v';
+const SCANS = '/scan';
+const VANILLA_URL = 'https://raw.githubusercontent.com/Mojang/bedrock-samples/main/resource_pack/';
+const MODES = ['fancy', 'vibrant'];
+
+export const ENVIRONMENTS = [
+	{id: 'grid', label: 'Grid'},
+	{id: 'floor', label: 'Grass floor'},
+	{id: 'plains', label: 'Plains', scan: true},
+	{id: 'cherry_grove', label: 'Cherry grove', scan: true},
+	{id: 'desert', label: 'Desert', scan: true},
+	{id: 'snowy_plains', label: 'Snowy plains', scan: true},
+	{id: 'jungle', label: 'Jungle', scan: true},
+	{id: 'swamp', label: 'Swamp', scan: true},
+];
 
 export const Game = {
 	engine: storedEngine(),
+	environment: stored('snowstorm_environment', 'grid'),
 	time: storedTime(),
 	status: '',
 	warnings: [],
@@ -21,18 +37,27 @@ export const Game = {
 };
 
 let sim = null, br = null, viewport = null, canvas = null, view = null;
-let effectText = '', effectId = '', textures = {}, idle = 0, opening = null;
+let effectText = '', effectId = '', textures = {}, idle = 0, opening = null, sceneKey = '';
+let scans = null;
+const tried = new Set();
+const solids = {};
 
+function stored(key, fallback) {
+	try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
+}
+function store(key, value) {
+	try { localStorage.setItem(key, value); } catch (e) {}
+}
 function storedEngine() {
-	let v = null;
-	try { v = localStorage.getItem('snowstorm_engine'); } catch (e) {}
 	if (!navigator.gpu) return 'wintersky';
-	return ENGINES.includes(v) ? v : 'fancy';
+	let v = stored('snowstorm_engine', 'fancy');
+	return MODES.includes(v) ? v : 'fancy';
 }
 function storedTime() {
-	try { let t = parseFloat(localStorage.getItem('snowstorm_time')); return Number.isFinite(t) ? t : 0; } catch (e) { return 0; }
+	let t = parseFloat(stored('snowstorm_time', '0'));
+	return Number.isFinite(t) ? t : 0;
 }
-const vendor = file => new URL('vendor/' + file, document.baseURI).href;
+const local = file => new URL(file, document.baseURI).href;
 
 function loadScript(src) {
 	return new Promise((resolve, reject) => {
@@ -43,19 +68,26 @@ function loadScript(src) {
 }
 
 async function loadSim() {
-	if (!window.Go) await loadScript(vendor('particle-sim/wasm_exec.js'));
+	if (!window.Go) await loadScript(local('vendor/particle-sim/wasm_exec.js'));
 	let go = new window.Go();
-	let bytes = await (await fetch(vendor('particle-sim/particle-sim.wasm'))).arrayBuffer();
+	let bytes = await (await fetch(local('vendor/particle-sim/particle-sim.wasm'))).arrayBuffer();
 	let {instance} = await WebAssembly.instantiate(bytes, go.importObject);
 	go.run(instance);
 	return window.particleSim;
 }
 
 async function loadRenderer() {
-	let mod = await import(/* webpackIgnore: true */ vendor('renderer/bedrock_renderer_web.js'));
+	let mod = await import(/* webpackIgnore: true */ local('vendor/renderer/bedrock_renderer_web.js'));
 	await mod.default();
 	await mod.init();
 	return mod;
+}
+
+async function loadScans() {
+	let list = await (await fetch(local('scans/scans.json'))).json();
+	let out = {};
+	for (let s of list) out[s.name] = s;
+	return out;
 }
 
 export function isGame() {
@@ -70,16 +102,22 @@ export async function initGame(three_view) {
 	await setEngine(Game.engine);
 }
 
+function showGame(on) {
+	view.canvas.parentNode.classList.toggle('game_mode', on);
+	Scene.space.visible = !on;
+}
+
 export async function setEngine(engine) {
 	Game.engine = engine;
-	try { localStorage.setItem('snowstorm_engine', engine); } catch (e) {}
+	if (isGame()) store('snowstorm_engine', engine);
 	closeViewport();
-	Scene.space.visible = !isGame();
+	showGame(isGame());
 	if (!isGame()) return;
 	Game.status = 'Loading the game renderer…';
 	try {
 		if (!sim) sim = await loadSim();
 		if (!br) br = await loadRenderer();
+		if (!scans) scans = await loadScans();
 		effectText = '';
 		syncEffect();
 		await openViewport();
@@ -88,24 +126,61 @@ export async function setEngine(engine) {
 		console.error(e);
 		Game.status = 'Game preview failed: ' + (e.message || e) + ' (Wintersky shown)';
 		Game.engine = 'wintersky';
-		Scene.space.visible = true;
+		showGame(false);
 	}
+}
+
+export async function setEnvironment(id) {
+	Game.environment = id;
+	store('snowstorm_environment', id);
+	if (!isGame()) return;
+	restart();
+	await reopen();
 }
 
 export function setTime(t) {
 	Game.time = t;
-	try { localStorage.setItem('snowstorm_time', String(t)); } catch (e) {}
+	store('snowstorm_time', String(t));
 	if (viewport != null) br.set_time(viewport, t);
 }
 
-function sceneJSON() {
-	let [w, h] = canvasSize();
-	return JSON.stringify({size: [w, h], camera: camera(), mode: Game.engine, rp: [BASE], background: 'transparent', clouds: false,
-		time: Game.time, objects: [], particles: []});
+function environment() {
+	return ENVIRONMENTS.find(e => e.id === Game.environment) || ENVIRONMENTS[0];
+}
+
+function objects(env) {
+	let out = [];
+	if (env.id === 'floor') out.push({block: 'grass_block', from: [-24, -1, -24], to: [23, -1, 23]});
+	else if (OptionValues.minecraft_block_visible && !env.scan) out.push({block: 'grass_block', from: [0, -1, 0], to: [0, -1, 0]});
+	if (env.scan && scans[env.id]) out.push({structure: env.id + '.mcstructure', pos: scans[env.id].origin});
+	return out;
+}
+
+function guides() {
+	let g = {};
+	if (OptionValues.grid_visible && !environment().scan) g.grid = {center: [0, 0], half: 32, y: 0};
+	if (OptionValues.axis_helper_visible) g.axes = [0, 0, 0];
+	if (OptionValues.minecraft_player_visible) g.player = [0, 0, 0];
+	return g;
+}
+
+function sceneObject() {
+	let env = environment();
+	let scene = {size: canvasSize(), camera: camera(), mode: Game.engine, rp: [FX, VANILLA], time: Game.time,
+		clouds: false, objects: objects(env), particles: [], guides: guides()};
+	if (env.id === 'grid') scene.background = 'transparent';
+	if (env.scan && scans[env.id]) scene.biome = scans[env.id].biome;
+	return scene;
+}
+
+// What the open viewport was built from: when it changes (environment, View menu toggles) the viewport is rebuilt.
+function currentKey() {
+	return JSON.stringify([Game.environment, guides(), OptionValues.minecraft_block_visible]);
 }
 
 function canvasSize() {
 	let dpr = Math.min(window.devicePixelRatio || 1, 2);
+	if (Game.engine === 'vibrant' && dpr > 1.5) dpr = 1;
 	let w = view.canvas.clientWidth || 300, h = view.canvas.clientHeight || 200;
 	return [Math.max(16, Math.round(w * dpr)), Math.max(16, Math.round(h * dpr))];
 }
@@ -115,25 +190,82 @@ function camera() {
 	return {pos: [p.x, p.y, p.z], look_at: [t.x, t.y, t.z], fov: view.camera.fov};
 }
 
+function remoteUrl(path) {
+	let rest = p => path.slice(p.length + 1).split('/').map(encodeURIComponent).join('/');
+	if (path.startsWith(VANILLA + '/')) return VANILLA_URL + rest(VANILLA);
+	if (path.startsWith(SCANS + '/')) return local('scans/' + rest(SCANS));
+	return null;
+}
+
+async function fetchMissing(text) {
+	for (let round = 0; round < 16; round++) {
+		let req = JSON.parse(br.required_files(text, SCANS));
+		let fresh = req.missing.filter(p => !tried.has(p) && remoteUrl(p));
+		if (!fresh.length) return req.error;
+		Game.status = `Loading ${fresh.length} game files…`;
+		await Promise.all(fresh.map(async p => {
+			tried.add(p);
+			try {
+				let r = await fetch(remoteUrl(p));
+				if (r.ok) br.add_asset(p, new Uint8Array(await r.arrayBuffer()));
+			} catch (e) {}
+		}));
+	}
+	return JSON.parse(br.required_files(text, SCANS)).error;
+}
+
 async function openViewport() {
 	if (opening) return opening;
 	opening = (async () => {
 		await uploadTextures();
-		let text = sceneJSON();
-		let req = JSON.parse(br.required_files(text, BASE));
-		if (req.error) throw new Error(req.error);
-		[canvas.width, canvas.height] = JSON.parse(text).size;
-		viewport = br.open(canvas, text, BASE);
+		sceneKey = currentKey();
+		let scene = sceneObject();
+		let text = JSON.stringify(scene);
+		let error = await fetchMissing(text);
+		if (error) throw new Error(error);
+		Game.status = '';
+		[canvas.width, canvas.height] = scene.size;
+		viewport = br.open(canvas, text, SCANS);
 		for (let w of br.take_warnings()) console.warn('renderer:', w);
 		canvas.style.display = '';
+		await applyCollision();
 	})();
 	try { await opening; } finally { opening = null; }
+}
+
+async function reopen() {
+	closeViewport();
+	try {
+		await openViewport();
+	} catch (e) {
+		console.error(e);
+		Game.status = 'Renderer: ' + (e.message || e);
+	}
 }
 
 function closeViewport() {
 	if (viewport != null) br.close(viewport);
 	viewport = null;
 	if (canvas) canvas.style.display = 'none';
+}
+
+async function solidOf(name) {
+	if (!solids[name]) {
+		let r = await fetch(local('scans/' + name + '.solid'));
+		if (!r.ok) throw new Error('cannot load the collision of ' + name);
+		solids[name] = new Uint8Array(await r.arrayBuffer());
+	}
+	return solids[name];
+}
+
+async function applyCollision() {
+	let env = environment();
+	sim.setFloor(Game.collision && !env.scan);
+	sim.setSolid(null);
+	if (env.scan && Game.collision && scans[env.id]) {
+		let {origin, size} = scans[env.id];
+		sim.setSolid(...origin, ...size, await solidOf(env.id));
+	}
 }
 
 // Every effect texture goes to the renderer as tex/<effect>.png; quads are pointed there by their effect id.
@@ -154,7 +286,6 @@ function configs() {
 }
 
 async function uploadTextures() {
-	let changed = false;
 	for (let [id, config] of Object.entries(configs())) {
 		let img = imageOf(config);
 		if (!img || textures[id] === img.src) continue;
@@ -162,11 +293,9 @@ async function uploadTextures() {
 		c.width = img.naturalWidth; c.height = img.naturalHeight;
 		c.getContext('2d').drawImage(img, 0, 0);
 		let blob = await new Promise(r => c.toBlob(r, 'image/png'));
-		br.add_asset(BASE + '/' + textureKey(id) + '.png', new Uint8Array(await blob.arrayBuffer()));
+		br.add_asset(FX + '/' + textureKey(id) + '.png', new Uint8Array(await blob.arrayBuffer()));
 		textures[id] = img.src;
-		changed = true;
 	}
-	return changed;
 }
 
 function texturesChanged() {
@@ -187,30 +316,31 @@ function vars() {
 
 // The edited effect and its event sub-effects, re-read whenever the exported JSON changes.
 function syncEffect() {
-	let file = generateFile();
-	let text = JSON.stringify(file);
+	let text = JSON.stringify(generateFile());
 	let subs = JSON.stringify(Object.keys(EventSubEffects).map(k => EventSubEffects[k]?.json || null));
 	if (text + subs === effectText) return false;
 	effectText = text + subs;
+	let errors = [];
 	for (let id in EventSubEffects) {
 		let json = EventSubEffects[id]?.json;
 		let r = json && sim.add(JSON.stringify(json));
-		if (r && r.error) console.warn(id, r.error);
+		if (r && r.error) errors.push(id + ': ' + r.error);
 	}
 	let r = sim.add(text);
 	effectId = r.id || '';
+	if (r.error) errors.unshift(r.error);
 	restart();
-	if (r.error) Game.warnings.unshift(r.error);
+	Game.warnings.unshift(...errors);
 	return true;
 }
 
 export function restart() {
 	if (!sim) return;
 	sim.reset(1);
-	sim.setFloor(Game.collision);
 	Game.elapsed = 0;
 	idle = 0;
 	Game.warnings = [];
+	applyCollision().catch(e => { Game.status = e.message || String(e); });
 	if (effectId) sim.spawn(effectId, 0, 0, 0, JSON.stringify(vars()));
 	collectWarnings();
 }
@@ -246,12 +376,22 @@ function rendererQuads(quads) {
 	return out;
 }
 
+function draw() {
+	let [w, h] = canvasSize();
+	if (w !== canvas.width || h !== canvas.height) {
+		canvas.width = w; canvas.height = h;
+		br.resize(viewport, w, h);
+	}
+	br.set_camera(viewport, JSON.stringify(camera()));
+	br.set_particles(viewport, JSON.stringify(rendererQuads(JSON.parse(sim.quads()) || [])));
+	br.render(viewport);
+}
+
 // One drawn frame: the game ticks once per frame with the real frame time (clamped to 0.1 s by the simulator).
 export function frame(dt) {
 	if (!isGame() || !sim || viewport == null || opening) return;
-	if (syncEffect() || texturesChanged()) {
-		closeViewport();
-		openViewport().catch(e => { Game.status = 'Renderer: ' + (e.message || e); });
+	if (syncEffect() || texturesChanged() || currentKey() !== sceneKey) {
+		reopen();
 		return;
 	}
 	if (!Game.paused) {
@@ -264,13 +404,13 @@ export function frame(dt) {
 		} else idle = 0;
 	}
 	Game.particles = sim.count();
-	let [w, h] = canvasSize();
-	if (w !== canvas.width || h !== canvas.height) {
-		canvas.width = w; canvas.height = h;
-		br.resize(viewport, w, h);
-	}
-	br.set_camera(viewport, JSON.stringify(camera()));
-	br.set_particles(viewport, JSON.stringify(rendererQuads(JSON.parse(sim.quads()) || [])));
 	collectWarnings();
-	br.render(viewport);
+	draw();
+}
+
+// The canvas of a frame drawn now (a WebGPU canvas keeps its picture only within the task that drew it).
+export function screenshotURL() {
+	if (!isGame() || viewport == null) return null;
+	draw();
+	return canvas.toDataURL();
 }
