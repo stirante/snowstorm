@@ -407,41 +407,55 @@ function collectWarnings() {
 const PLANES = {emitter_transform_xy: [0, 0, 1], emitter_transform_xz: [0, 1, 0], emitter_transform_yz: [1, 0, 0]};
 const BASE_MATERIALS = ['particles_alpha', 'particles_opaque', 'particles_blend', 'particles_add'];
 
+const CAMERA = 0, DIRECTION = 1, AXIS = 2;
+
+// The renderer's facing (CAMERA / DIRECTION / AXIS), direction and extra roll for a facing_camera_mode.
 function facing(mode, d) {
-	if (!mode || mode === 'rotate_xyz' || mode === 'lookat_xyz') return {};
-	if (mode === 'rotate_y' || mode === 'lookat_y') return {facing: 'axis', direction: [0, 1, 0]};
-	if (PLANES[mode]) return {facing: 'direction', direction: PLANES[mode]};
-	if (d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < 1e-8) return {};
-	if (mode === 'direction_z') return {facing: 'direction', direction: d};
-	return {facing: 'axis', direction: d, turn: mode === 'direction_x' || mode === 'lookat_direction' ? 90 : 0};
+	if (!mode || mode === 'rotate_xyz' || mode === 'lookat_xyz') return [CAMERA, [0, 0, 0], 0];
+	if (mode === 'rotate_y' || mode === 'lookat_y') return [AXIS, [0, 1, 0], 0];
+	if (PLANES[mode]) return [DIRECTION, PLANES[mode], 0];
+	if (d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < 1e-8) return [CAMERA, [0, 0, 0], 0];
+	if (mode === 'direction_z') return [DIRECTION, d, 0];
+	return [AXIS, d, mode === 'direction_x' || mode === 'lookat_direction' ? 90 : 0];
 }
 
 const clamp01 = x => Math.min(1, Math.max(0, x));
+const STRIDE = 21;
+let packed = new Float32Array(0);
 
-// One quad of particleSim.quadsPacked() (layout: particle-sim's PackQuads) as the renderer's particle.
-function packedQuad(d, i, strings) {
-	let effect = strings[d[i + 23]];
-	if (!textures[effect]) return null;
-	if (!(Math.abs(d[i + 3]) > 1e-4 && Math.abs(d[i + 4]) > 1e-4)) return null;
-	let pos = [d[i], d[i + 1], d[i + 2]], uv = [d[i + 5], d[i + 6], d[i + 7], d[i + 8]], rotation = d[i + 13];
-	if (![...pos, ...uv, rotation].every(Number.isFinite)) return null;
-	let material = strings[d[i + 22]];
-	let f = facing(strings[d[i + 21]], [d[i + 14], d[i + 15], d[i + 16]]);
-	let q = {texture: textureKey(effect), pos, size: [Math.abs(d[i + 3]), Math.abs(d[i + 4])], uv,
-		color: [clamp01(d[i + 9]), clamp01(d[i + 10]), clamp01(d[i + 11]), clamp01(d[i + 12])], rotation: rotation + (f.turn || 0),
-		material: BASE_MATERIALS.includes(material) ? material : 'particles_blend', emissive: d[i + 19] ? 0 : 1};
-	if (f.facing) { q.facing = f.facing; q.direction = f.direction; }
-	return q;
+// The string table the renderer gets: each simulator string index -> renderer index (texture or material).
+function rendererStrings(strings) {
+	let out = [], texture = [], material = [];
+	let add = s => { let i = out.indexOf(s); if (i < 0) { i = out.length; out.push(s); } return i; };
+	strings.forEach((s, i) => {
+		texture[i] = textures[s] ? add(textureKey(s)) : -1;
+		material[i] = add(BASE_MATERIALS.includes(s) ? s : 'particles_blend');
+	});
+	return {out, texture, material};
 }
 
-function rendererQuads() {
+// Writes quad i of particleSim.quadsPacked() (particle-sim's PackQuads layout) at o in the renderer's packed
+// layout (bedrock-renderer's particles_packed); false when the game would not draw it.
+function packQuad(d, i, o, table, strings) {
+	let texture = table.texture[d[i + 23]];
+	if (texture < 0 || !(Math.abs(d[i + 3]) > 1e-4 && Math.abs(d[i + 4]) > 1e-4)) return false;
+	for (let k of [0, 1, 2, 5, 6, 7, 8, 13]) if (!Number.isFinite(d[i + k])) return false;
+	let [kind, dir, turn] = facing(strings[d[i + 21]], [d[i + 14], d[i + 15], d[i + 16]]);
+	let q = [d[i], d[i + 1], d[i + 2], Math.abs(d[i + 3]), Math.abs(d[i + 4]), d[i + 5], d[i + 6], d[i + 7], d[i + 8],
+		clamp01(d[i + 9]), clamp01(d[i + 10]), clamp01(d[i + 11]), clamp01(d[i + 12]), d[i + 13] + turn, d[i + 19] ? 0 : 1,
+		kind, dir[0], dir[1], dir[2], texture, table.material[d[i + 22]]];
+	if (!q.every(Number.isFinite)) return false;
+	packed.set(q, o);
+	return true;
+}
+
+function sendParticles() {
 	let {data, strings, stride} = sim.quadsPacked();
-	let out = [];
-	for (let i = 0; i + stride <= data.length; i += stride) {
-		let q = packedQuad(data, i, strings);
-		if (q) out.push(q);
-	}
-	return out;
+	let n = Math.floor(data.length / stride);
+	if (packed.length < n * STRIDE) packed = new Float32Array(n * STRIDE * 2);
+	let table = rendererStrings(strings), o = 0;
+	for (let i = 0; i < n * stride; i += stride) if (packQuad(data, i, o, table, strings)) o += STRIDE;
+	br.set_particles_packed(viewport, packed.subarray(0, o), table.out);
 }
 
 function draw() {
@@ -451,7 +465,7 @@ function draw() {
 		br.resize(viewport, w, h);
 	}
 	br.set_camera(viewport, JSON.stringify(camera()));
-	br.set_particles(viewport, JSON.stringify(rendererQuads()));
+	sendParticles();
 	br.render(viewport);
 }
 

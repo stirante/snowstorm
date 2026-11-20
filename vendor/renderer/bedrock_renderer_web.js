@@ -351,6 +351,30 @@ export function set_particles(id, json) {
 
 /**
  * @param {number} id
+ * @param {Float32Array | number[]} data
+ * @param {string[]} strings
+ */
+export function set_particles_packed(id, data, strings) {
+    const val3 = +id;
+    let ptr0, len0, ptr1, len1;
+    try {
+        ptr0 = passArrayF32ToWasm0(data, wasm.__wbindgen_malloc);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = passArrayJsValueToWasm0(strings, wasm.__wbindgen_malloc);
+        len1 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr1) { wasm.__externref_drop_slice(ptr1, len1); wasm.__wbindgen_free(ptr1, len1 * 4, 4); }
+        if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 4, 4); }
+        throw e;
+    }
+    const ret = wasm.set_particles_packed(val3, ptr0, len0, ptr1, len1);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * @param {number} id
  * @param {number} time
  */
 export function set_time(id, time) {
@@ -1468,12 +1492,12 @@ function __wbg_get_imports() {
         },
         __wbindgen_generic_0000000000000003: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("any")], shim_idx: 416, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__30);
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__31);
             return ret;
         },
         __wbindgen_generic_0000000000000004: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("undefined")], shim_idx: 416, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__31);
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__32);
             return ret;
         },
         __wbindgen_generic_0000000000000005: function(arg0) {
@@ -1527,15 +1551,15 @@ function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bin
     }
 }
 
-function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__30(arg0, arg1, arg2) {
-    const ret = wasm.wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__30(arg0, arg1, arg2);
+function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__31(arg0, arg1, arg2) {
+    const ret = wasm.wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__31(arg0, arg1, arg2);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
 }
 
-function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__31(arg0, arg1, arg2) {
-    const ret = wasm.wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__31(arg0, arg1, arg2);
+function wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__32(arg0, arg1, arg2) {
+    const ret = wasm.wasm_bindgen_82074682d88d34af___convert__closures_____invoke___wasm_bindgen_82074682d88d34af___sys__JsNullable_wgpu_c2e4d34cf06de006___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_82074682d88d34af___JsError___true__32(arg0, arg1, arg2);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -1812,6 +1836,23 @@ function passArray8ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 1, 1) >>> 0;
     getUint8ArrayMemory0().set(arg, ptr / 1);
     WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function passArrayF32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getFloat32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function passArrayJsValueToWasm0(array, malloc) {
+    const ptr = malloc(array.length * 4, 4) >>> 0;
+    for (let i = 0; i < array.length; i++) {
+        const add = addToExternrefTable0(array[i]);
+        getDataViewMemory0().setUint32(ptr + 4 * i, add, true);
+    }
+    WASM_VECTOR_LEN = array.length;
     return ptr;
 }
 
