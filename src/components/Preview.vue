@@ -3,6 +3,7 @@
         <div id="canvas_wrapper">
             <div id="overlay_timestamp">{{ timestamp }}</div>
             <canvas id="canvas" @click="blur()" ref="canvas"></canvas>
+            <div id="game_status" v-if="game.status">{{ game.status }}</div>
             <div class="placeholder_bar" v-if="show_placeholder_bar">
                 <ul>
                     <li v-for="(key) in placeholder_keys" :key="key">
@@ -31,6 +32,12 @@
                 <option value="entity">Entity</option>
                 <option value="locator">Locator</option>
             </select>
+            <select id="engine" v-model="engine" @change="changeEngine()" title="Simulation and look: particle-sim + the game's renderer, or Wintersky">
+                <option value="fancy" :disabled="!webgpu">Game: Fancy</option>
+                <option value="vibrant" :disabled="!webgpu">Game: Vibrant Visuals</option>
+                <option value="wintersky">Wintersky</option>
+            </select>
+            <input v-if="engine != 'wintersky'" class="time_slider" type="range" min="0" max="1" step="0.005" :value="(game.time + 0.5) % 1" @input="changeTime($event)" :title="'Time of day ' + clock">
             <div class="tool ground_collision" :class="{toggle_enabled: collision}" @click="toggleCollision()" title="Preview Collisions">
                 <FlipVertical2 :size="20" v-if="collision" />
                 <Minus :size="20" v-else />
@@ -50,6 +57,7 @@
 
             <div class="spacing" />
 
+            <div class="tool warning" v-if="engine != 'wintersky' && game.warnings.length" :title="game.warnings.join(' | ')"><i class="unicode_icon warn">⚙</i>{{ game.warnings.length }}</div>
             <div class="tool warning" @click="$emit('opendialog', 'warnings')" v-if="warning_count" :title="getWarningTitle()"><i class="unicode_icon warn">⚠</i>{{ warning_count }}</div>
             <div class="stat">{{particle_counter}} P</div>
             <div class="stat" style="width: 66px;">{{fps}} FPS</div>
@@ -84,6 +92,7 @@
     import {EditListeners} from '../edits'
     import {updateVariablePlaceholderList, bakePlaceholderVariable} from './../variable_placeholders'
     import { createReferenceBlock, createReferencePlayer } from '../references.ts';
+    import { Game, initGame, setEngine, setTime, frame, restart, isGame } from '../game_preview';
 
     let BACKGROUND_COLOR = 0x29323a;
  
@@ -107,6 +116,7 @@
             stop() {
                 Emitter.stop(true);
                 Emitter.paused = true;
+                restart();
                 return View.PlaybackController;
             }
         }
@@ -214,11 +224,19 @@
 
     }
     let last_frame_time = performance.now();
+    let last_game_time = performance.now();
     function animate() {
         requestAnimationFrame(animate);
 
         let timestamp = performance.now();
-        if (timestamp - last_frame_time > 32) {
+        if (isGame()) {
+            Game.paused = Emitter.paused;
+            if (View.canvas.offsetParent) {
+                View.controls.update();
+                frame(Math.min(0.1, (timestamp - last_game_time) / 1000));
+            }
+            last_game_time = timestamp;
+        } else if (timestamp - last_frame_time > 32) {
             last_frame_time = timestamp;
             if (!Emitter.paused) {
                 Emitter.tick();
@@ -230,7 +248,7 @@
             Scene.updateFacingRotation(View.camera);
             View.renderer.render(View.scene, View.camera);
             View.frames_this_second++;
-            stats.time = Emitter.age;
+            stats.time = isGame() ? Game.elapsed : Emitter.age;
         }
     }
     function resizeCanvas() {
@@ -276,7 +294,10 @@
             placeholder_keys: [],
             placeholder_values: {},
             show_placeholder_bar: localStorage.getItem('snowstorm_show_placeholder_bar') == 'true',
-            bake_placeholder_key: null
+            bake_placeholder_key: null,
+            engine: Game.engine,
+            webgpu: !!navigator.gpu,
+            game: Game
         }},
         components: {
             FlipVertical2,
@@ -321,6 +342,14 @@
             },
             changeLoopMode() {
                 Emitter.loop_mode = this.loop_mode;
+                Game.loop_mode = this.loop_mode;
+            },
+            async changeEngine() {
+                await setEngine(this.engine);
+                this.engine = Game.engine;
+            },
+            changeTime(event) {
+                setTime(parseFloat(event.target.value) - 0.5);
             },
             changeParentMode() {
                 Emitter.parent_mode = this.parent_mode;
@@ -328,6 +357,8 @@
             toggleCollision() {
                 Emitter.ground_collision = !Emitter.ground_collision;
                 this.collision = Emitter.ground_collision;
+                Game.collision = this.collision;
+                restart();
             },
             getWarningTitle() {
                 return this.warning_count == 1
@@ -350,16 +381,21 @@
                 let fractions = Math.floor((time % 1) * 10).toString();
                 //if (fractions.length == 1) fractions = '0'+fractions;
                 return `${Math.floor(time)}:${fractions}`;
+            },
+            clock() {
+                let m = Math.round((((this.game.time * 24 + 12) % 24) + 24) % 24 * 60) % 1440;
+                return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
             }
         },
         mounted() {
             initPreview(this.$refs.canvas);
+            initGame(View).then(() => { this.engine = Game.engine; });
             setInterval(() => {
                 this.fps = View.frames_this_second;
                 View.frames_this_second = 0;
             }, 1000)
             setInterval(() => {
-                this.particles = Emitter.particles.length;
+                this.particles = isGame() ? Game.particles : Emitter.particles.length;
             }, 200)
             setInterval(() => {
                 if (window.document.hasFocus() && View.canvas.offsetParent) {
@@ -387,7 +423,33 @@
 	#canvas_wrapper {
 		height: calc(100% - var(--footer-height));
 		width: 100%;
+		position: relative;
 	}
+    #canvas_wrapper >>> canvas.game_canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+    }
+    #game_status {
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: 4px 10px;
+        opacity: 0.7;
+        pointer-events: none;
+    }
+    input.time_slider {
+        appearance: auto;
+        -webkit-appearance: auto;
+        width: 110px;
+        height: auto;
+        margin: 0 6px;
+        padding: 0;
+        background: transparent;
+        border: none;
+        accent-color: var(--color-accent, #3e90ff);
+    }
 	canvas {
 		height: 100%;
 		width: 100%;

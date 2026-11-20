@@ -6,15 +6,9 @@ if (!vscode) {
         return 'Your changes might not be saved';
     }
 
-    async function registerSW() {
-        try {
-            await navigator.serviceWorker.register('./service_worker.js');
-        } catch (err) {
-            console.log(err)
-        }
-	}
+    // No offline worker in this fork: its cache-first copy would keep an old build after each deploy.
     if ('serviceWorker' in navigator) {
-        registerSW();
+        navigator.serviceWorker.getRegistrations().then(list => list.forEach(r => r.unregister())).catch(() => {});
     }
 
     loadFromUrl()
