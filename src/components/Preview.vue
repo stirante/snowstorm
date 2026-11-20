@@ -67,8 +67,11 @@
             <select id="quality" @change="quality = qualities[$event.target.selectedIndex].id; changeQuality()" title="Render resolution">
                 <option v-for="q in qualities" :key="q.id" :selected="q.id == quality" :title="q.title">{{ q.label }}</option>
             </select>
-            <div class="tool" :class="{toggle_enabled: show_mers}" @click="show_mers = !show_mers" title="Vibrant Visuals texture set (MER / MERS)" style="width: auto; padding: 0 8px;">MER</div>
-            <input class="time_slider" type="range" min="0" max="1" step="0.005" :value="(game.time + 0.5) % 1" @input="changeTime($event)" :title="'Time of day ' + clock">
+            <button class="footer_button" :class="{active: show_mers}" @click="show_mers = !show_mers" title="Vibrant Visuals texture set (MER / MERS)">Texture set</button>
+            <label class="time_control" title="Time of day">
+                <span>Time {{ clock }}</span>
+                <input class="time_slider" type="range" min="0" max="1" step="0.005" :value="(game.time + 0.5) % 1" @input="changeTime($event)">
+            </label>
             <div class="tool ground_collision" :class="{toggle_enabled: collision}" @click="toggleCollision()" title="Preview Collisions">
                 <FlipVertical2 :size="20" v-if="collision" />
                 <Minus :size="20" v-else />
@@ -433,16 +436,36 @@
         opacity: 0.7;
         pointer-events: none;
     }
+    .footer_button {
+        margin: 3px 4px;
+        padding: 0 10px;
+        background-color: var(--color-title);
+        color: var(--color-text);
+        border: 1px solid var(--color-border);
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .footer_button:hover {
+        color: var(--color-highlight);
+    }
+    .footer_button.active {
+        border-color: var(--color-accent);
+        color: var(--color-highlight);
+    }
+    .time_control {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+    }
+    .time_control > span {
+        font-variant-numeric: tabular-nums;
+    }
     input.time_slider {
-        appearance: auto;
-        -webkit-appearance: auto;
         width: 110px;
-        height: auto;
-        margin: 0 6px;
+        height: 24px;
         padding: 0;
-        background: transparent;
-        border: none;
-        accent-color: var(--color-accent, #3e90ff);
+        --color-track: var(--color-title);
     }
 	canvas {
 		height: 100%;

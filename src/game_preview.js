@@ -27,7 +27,6 @@ export const ENVIRONMENTS = [
 export const QUALITIES = [
 	{id: 'fast', label: 'Fast', title: 'One pixel per CSS pixel'},
 	{id: 'sharp', label: 'Sharp', title: 'One pixel per screen pixel'},
-	{id: 'smooth', label: 'Smooth', title: 'Twice the screen pixels, scaled down (antialiasing)'},
 ];
 const MAX_SIDE = 4096;
 
@@ -43,7 +42,7 @@ export const Mers = {
 
 export const Game = {
 	engine: storedEngine(),
-	quality: stored('snowstorm_quality', 'sharp'),
+	quality: storedQuality(),
 	environment: stored('snowstorm_environment', 'grid'),
 	time: storedTime(),
 	status: '',
@@ -66,6 +65,10 @@ function stored(key, fallback) {
 }
 function store(key, value) {
 	try { localStorage.setItem(key, value); } catch (e) {}
+}
+function storedQuality() {
+	let v = stored('snowstorm_quality', 'sharp');
+	return QUALITIES.some(q => q.id === v) ? v : 'sharp';
 }
 function storedEngine() {
 	let v = stored('snowstorm_engine', 'fancy');
@@ -206,7 +209,7 @@ function currentKey() {
 
 function canvasSize() {
 	let dpr = Math.min(window.devicePixelRatio || 1, 3);
-	let scale = {fast: 1, sharp: dpr, smooth: dpr * 2}[Game.quality] || dpr;
+	let scale = {fast: 1, sharp: dpr}[Game.quality] || dpr;
 	let w = canvas.clientWidth || 300, h = canvas.clientHeight || 200;
 	scale = Math.min(scale, MAX_SIDE / Math.max(w, h));
 	return [Math.max(16, Math.round(w * scale)), Math.max(16, Math.round(h * scale))];
@@ -413,17 +416,30 @@ function facing(mode, d) {
 	return {facing: 'axis', direction: d, turn: mode === 'direction_x' || mode === 'lookat_direction' ? 90 : 0};
 }
 
-function rendererQuads(quads) {
+const clamp01 = x => Math.min(1, Math.max(0, x));
+
+// One quad of particleSim.quadsPacked() (layout: particle-sim's PackQuads) as the renderer's particle.
+function packedQuad(d, i, strings) {
+	let effect = strings[d[i + 23]];
+	if (!textures[effect]) return null;
+	if (!(Math.abs(d[i + 3]) > 1e-4 && Math.abs(d[i + 4]) > 1e-4)) return null;
+	let pos = [d[i], d[i + 1], d[i + 2]], uv = [d[i + 5], d[i + 6], d[i + 7], d[i + 8]], rotation = d[i + 13];
+	if (![...pos, ...uv, rotation].every(Number.isFinite)) return null;
+	let material = strings[d[i + 22]];
+	let f = facing(strings[d[i + 21]], [d[i + 14], d[i + 15], d[i + 16]]);
+	let q = {texture: textureKey(effect), pos, size: [Math.abs(d[i + 3]), Math.abs(d[i + 4])], uv,
+		color: [clamp01(d[i + 9]), clamp01(d[i + 10]), clamp01(d[i + 11]), clamp01(d[i + 12])], rotation: rotation + (f.turn || 0),
+		material: BASE_MATERIALS.includes(material) ? material : 'particles_blend', emissive: d[i + 19] ? 0 : 1};
+	if (f.facing) { q.facing = f.facing; q.direction = f.direction; }
+	return q;
+}
+
+function rendererQuads() {
+	let {data, strings, stride} = sim.quadsPacked();
 	let out = [];
-	for (let p of quads) {
-		if (!textures[p.effect]) continue;
-		if (!(Math.abs(p.size[0]) > 1e-4 && Math.abs(p.size[1]) > 1e-4)) continue;
-		let f = facing(p.mode, p.dir);
-		let q = {texture: textureKey(p.effect), pos: p.pos, size: [Math.abs(p.size[0]), Math.abs(p.size[1])], uv: p.uv,
-			color: p.color.map(x => Math.min(1, Math.max(0, x))), rotation: p.rotation + (f.turn || 0),
-			material: BASE_MATERIALS.includes(p.material) ? p.material : 'particles_blend', emissive: p.lit ? 0 : 1};
-		if (f.facing) { q.facing = f.facing; q.direction = f.direction; }
-		if ([...q.pos, ...q.uv, q.rotation].every(Number.isFinite)) out.push(q);
+	for (let i = 0; i + stride <= data.length; i += stride) {
+		let q = packedQuad(data, i, strings);
+		if (q) out.push(q);
 	}
 	return out;
 }
@@ -435,7 +451,7 @@ function draw() {
 		br.resize(viewport, w, h);
 	}
 	br.set_camera(viewport, JSON.stringify(camera()));
-	br.set_particles(viewport, JSON.stringify(rendererQuads(JSON.parse(sim.quads()) || [])));
+	br.set_particles(viewport, JSON.stringify(rendererQuads()));
 	br.render(viewport);
 }
 
