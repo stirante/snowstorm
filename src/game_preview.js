@@ -1,10 +1,11 @@
 // The preview: particle-sim (the game's particle rules, Go on molang-go) simulates the effect and bedrock-renderer
-// (the game's Fancy / Vibrant Visuals pipelines, WebGPU) draws the whole view: the environment, the guides and the
-// particles. three.js only keeps the orbit camera. Wintersky remains only for browsers without WebGPU.
+// (the game's Fancy / Vibrant Visuals pipelines, WebGPU) draws the whole view on the preview canvas: the environment,
+// the guides and the particles. The camera is orbit.js.
 import {generateFile} from './export'
 import {Config, Scene} from './emitter'
 import {EventSubEffects} from './event_sub_effects'
 import {OptionValues} from './options'
+import {Orbit, camera} from './orbit'
 
 const FX = '/fx';
 const VANILLA = '/v';
@@ -49,7 +50,6 @@ function store(key, value) {
 	try { localStorage.setItem(key, value); } catch (e) {}
 }
 function storedEngine() {
-	if (!navigator.gpu) return 'wintersky';
 	let v = stored('snowstorm_engine', 'fancy');
 	return MODES.includes(v) ? v : 'fancy';
 }
@@ -90,29 +90,20 @@ async function loadScans() {
 	return out;
 }
 
-export function isGame() {
-	return Game.engine !== 'wintersky';
-}
-
-export async function initGame(three_view) {
-	view = three_view;
-	canvas = document.createElement('canvas');
-	canvas.className = 'game_canvas';
-	view.canvas.parentNode.insertBefore(canvas, view.canvas.nextSibling);
+export async function initGame(preview_view) {
+	view = preview_view;
+	canvas = view.canvas;
 	await setEngine(Game.engine);
-}
-
-function showGame(on) {
-	view.canvas.parentNode.classList.toggle('game_mode', on);
-	Scene.space.visible = !on;
 }
 
 export async function setEngine(engine) {
 	Game.engine = engine;
-	if (isGame()) store('snowstorm_engine', engine);
+	store('snowstorm_engine', engine);
 	closeViewport();
-	showGame(isGame());
-	if (!isGame()) return;
+	if (!navigator.gpu) {
+		Game.status = 'The preview needs WebGPU (a current Chrome, Edge or Safari).';
+		return;
+	}
 	Game.status = 'Loading the game renderer…';
 	try {
 		if (!sim) sim = await loadSim();
@@ -124,16 +115,14 @@ export async function setEngine(engine) {
 		Game.status = '';
 	} catch (e) {
 		console.error(e);
-		Game.status = 'Game preview failed: ' + (e.message || e) + ' (Wintersky shown)';
-		Game.engine = 'wintersky';
-		showGame(false);
+		Game.status = 'Preview failed: ' + (e.message || e);
 	}
 }
 
 export async function setEnvironment(id) {
 	Game.environment = id;
 	store('snowstorm_environment', id);
-	if (!isGame()) return;
+	if (!br) return;
 	restart();
 	await reopen();
 }
@@ -181,13 +170,8 @@ function currentKey() {
 function canvasSize() {
 	let dpr = Math.min(window.devicePixelRatio || 1, 2);
 	if (Game.engine === 'vibrant' && dpr > 1.5) dpr = 1;
-	let w = view.canvas.clientWidth || 300, h = view.canvas.clientHeight || 200;
+	let w = canvas.clientWidth || 300, h = canvas.clientHeight || 200;
 	return [Math.max(16, Math.round(w * dpr)), Math.max(16, Math.round(h * dpr))];
-}
-
-function camera() {
-	let p = view.camera.position, t = view.controls.target;
-	return {pos: [p.x, p.y, p.z], look_at: [t.x, t.y, t.z], fov: view.camera.fov};
 }
 
 function remoteUrl(path) {
@@ -227,7 +211,6 @@ async function openViewport() {
 		[canvas.width, canvas.height] = scene.size;
 		viewport = br.open(canvas, text, SCANS);
 		for (let w of br.take_warnings()) console.warn('renderer:', w);
-		canvas.style.display = '';
 		await applyCollision();
 	})();
 	try { await opening; } finally { opening = null; }
@@ -246,7 +229,6 @@ async function reopen() {
 function closeViewport() {
 	if (viewport != null) br.close(viewport);
 	viewport = null;
-	if (canvas) canvas.style.display = 'none';
 }
 
 async function solidOf(name) {
@@ -389,13 +371,13 @@ function draw() {
 
 // One drawn frame: the game ticks once per frame with the real frame time (clamped to 0.1 s by the simulator).
 export function frame(dt) {
-	if (!isGame() || !sim || viewport == null || opening) return;
+	if (!sim || viewport == null || opening) return;
 	if (syncEffect() || texturesChanged() || currentKey() !== sceneKey) {
 		reopen();
 		return;
 	}
 	if (!Game.paused) {
-		sim.setViewDistance(view.camera.position.distanceTo(view.controls.target));
+		sim.setViewDistance(Orbit.distance);
 		sim.step(dt);
 		Game.elapsed += dt;
 		if (sim.emitters() === 0 && Game.loop_mode !== 'once') {
@@ -410,7 +392,7 @@ export function frame(dt) {
 
 // The canvas of a frame drawn now (a WebGPU canvas keeps its picture only within the task that drew it).
 export function screenshotURL() {
-	if (!isGame() || viewport == null) return null;
+	if (viewport == null) return null;
 	draw();
 	return canvas.toDataURL();
 }

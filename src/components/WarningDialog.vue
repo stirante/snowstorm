@@ -25,7 +25,7 @@
 
 import {Config} from './../emitter'
 import Molang from 'molangjs'
-import {Game, isGame} from './../game_preview'
+import {Game} from './../game_preview'
 
 const errors = [];
 let parser = new Molang();
@@ -60,9 +60,7 @@ function validate() {
         errors.push({text: `The particle size is negative, which is not supported`})
     }
 
-    if (isGame()) {
-        for (let text of Game.warnings) errors.push({text});
-    }
+    for (let text of Game.warnings) errors.push({text});
 
     return errors;
 }

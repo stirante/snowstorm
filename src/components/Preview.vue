@@ -32,15 +32,14 @@
                 <option value="entity">Entity</option>
                 <option value="locator">Locator</option>
             </select>
-            <select id="engine" v-model="engine" @change="changeEngine()" title="Graphics mode of the game's renderer">
-                <option value="fancy" v-if="webgpu">Fancy</option>
-                <option value="vibrant" v-if="webgpu">Vibrant Visuals</option>
-                <option value="wintersky" v-if="!webgpu">Wintersky (no WebGPU)</option>
+            <select id="engine" v-model="engine" @change="changeEngine()" title="Graphics mode">
+                <option value="fancy">Fancy</option>
+                <option value="vibrant">Vibrant Visuals</option>
             </select>
-            <select id="environment" v-if="engine != 'wintersky'" v-model="environment" @change="changeEnvironment()" title="Environment">
+            <select id="environment" v-model="environment" @change="changeEnvironment()" title="Environment">
                 <option v-for="env in environments" :key="env.id" :value="env.id">{{ env.label }}</option>
             </select>
-            <input v-if="engine != 'wintersky'" class="time_slider" type="range" min="0" max="1" step="0.005" :value="(game.time + 0.5) % 1" @input="changeTime($event)" :title="'Time of day ' + clock">
+            <input class="time_slider" type="range" min="0" max="1" step="0.005" :value="(game.time + 0.5) % 1" @input="changeTime($event)" :title="'Time of day ' + clock">
             <div class="tool ground_collision" :class="{toggle_enabled: collision}" @click="toggleCollision()" title="Preview Collisions">
                 <FlipVertical2 :size="20" v-if="collision" />
                 <Minus :size="20" v-else />
@@ -77,9 +76,7 @@
 
 <script>
 
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-    import {Emitter, Scene, initParticles} from './../emitter';
+    import {Emitter} from './../emitter';
     import {validate} from './WarningDialog'
     import {OptionValues} from './../options'
     import {
@@ -93,30 +90,25 @@
     } from 'lucide-vue'
     import {EditListeners} from '../edits'
     import {updateVariablePlaceholderList, bakePlaceholderVariable} from './../variable_placeholders'
-    import { createReferenceBlock, createReferencePlayer } from '../references.ts';
-    import { Game, ENVIRONMENTS, initGame, setEngine, setEnvironment, setTime, frame, restart, isGame, screenshotURL } from '../game_preview';
+    import { Game, ENVIRONMENTS, initGame, setEngine, setEnvironment, setTime, frame, restart, screenshotURL } from '../game_preview';
+    import { attach } from '../orbit';
 
-    let BACKGROUND_COLOR = 0x29323a;
- 
     const View = {
         updateVariablePlaceholderList() {},
+        grid: {visible: OptionValues.grid_visible},
+        minecraft_block: {visible: OptionValues.minecraft_block_visible},
+        minecraft_player: {visible: OptionValues.minecraft_player_visible},
+        helper: {visible: OptionValues.axis_helper_visible},
         PlaybackController: {
             start() {
-                if (!Emitter.initialized || Emitter.age == 0) {
-                    Emitter.start();
-                }
                 Emitter.paused = false;
                 return View.PlaybackController;
             },
             toggle() {
                 Emitter.paused = !Emitter.paused;
-                if (!Emitter.paused) {
-                    View.PlaybackController.start();
-                }
                 return View.PlaybackController;
             },
             stop() {
-                Emitter.stop(true);
                 Emitter.paused = true;
                 restart();
                 return View.PlaybackController;
@@ -127,43 +119,10 @@
     const stats = {
         time: 0
     };
-    
-    const gizmo_colors = {
-        r: new THREE.Color(0xfd3043),
-        g: new THREE.Color(0x26ec45),
-        b: new THREE.Color(0x2d5ee8),
-        grid: new THREE.Color(0x3d4954),
-    }
-
-    function CustomAxesHelper( size ) {
-        size = size || 1;
-        var vertices = [
-            0, 0, 0,	size, 0, 0,
-            0, 0, 0,	0, size, 0,
-            0, 0, 0,	0, 0, size
-        ];
-        var c = gizmo_colors
-        var colors = [
-            c.r.r, c.r.g, c.r.b,	c.r.r, c.r.g, c.r.b, 
-            c.g.r, c.g.g, c.g.b,	c.g.r, c.g.g, c.g.b, 
-            c.b.r, c.b.g, c.b.b,	c.b.r, c.b.g, c.b.b,
-        ]
-        var geometry = new THREE.BufferGeometry();
-        geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
-        geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
-        var material = new THREE.LineBasicMaterial( { vertexColors: 2 } );
-        return new THREE.LineSegments(geometry, material );
-    }
-    CustomAxesHelper.prototype = Object.create( THREE.LineSegments.prototype );
 
     View.screenshot = function() {
-        // Set clear background
-        let color = new THREE.Color(BACKGROUND_COLOR);
-        View.renderer.setClearColor(color, 0);
-        View.renderer.render(View.scene, View.camera);
-        let dataurl = screenshotURL() || View.canvas.toDataURL()
-        View.renderer.setClearColor(color);
-
+        let dataurl = screenshotURL();
+        if (!dataurl) return;
         let is_ff = navigator.userAgent.toLowerCase().indexOf('firefox') > -1
         let download = document.createElement('a');
         download.href = dataurl
@@ -171,10 +130,8 @@
         if (is_ff) document.body.appendChild(download);
         download.click();
         if (is_ff) document.body.removeChild(download);
-
     }
 
-    
     function startAnimation() {
         View.PlaybackController.stop().start();
     }
@@ -182,95 +139,24 @@
         View.PlaybackController.toggle();
     }
 
-
     function initPreview(canvas) {
-
-        View.canvas = canvas
-        View.camera = new THREE.PerspectiveCamera(45, 16/9, 0.1, 3000);
-        View.camera.position.set(-6, 3, -6)
-        View.renderer = new THREE.WebGLRenderer({
-            canvas: View.canvas,
-            antialias: true,
-            alpha: true,
-            preserveDrawingBuffer: true,
-        })
-        View.renderer.setClearColor(new THREE.Color(BACKGROUND_COLOR));
-
-        View.controls = new OrbitControls(View.camera, View.canvas);
-        View.controls.target.set(0, 0.8, 0)
-        View.controls.screenSpacePanning = true;
-        View.controls.zoomSpeed = 1.4
-
-        View.scene = new THREE.Scene()
-
-        View.helper = new CustomAxesHelper(1);
-        View.grid = new THREE.GridHelper(64, 64, gizmo_colors.grid, gizmo_colors.grid);
-        View.grid.position.y -= 0.0005
-        View.scene.add(View.helper);
-        View.scene.add(View.grid);
-        View.helper.visible = OptionValues.axis_helper_visible;
-        View.grid.visible = OptionValues.grid_visible;
-
-        View.minecraft_block = createReferenceBlock();
-        View.scene.add(View.minecraft_block);
-        View.minecraft_block.visible = OptionValues.minecraft_block_visible;
-
-        View.minecraft_player = createReferencePlayer();
-        View.scene.add(View.minecraft_player);
-        View.minecraft_player.visible = OptionValues.minecraft_player_visible;
-
-        initParticles(View)
-
-        resizeCanvas()
-        animate()
-
+        View.canvas = canvas;
+        attach(canvas);
+        animate();
     }
-    let last_frame_time = performance.now();
-    let last_game_time = performance.now();
+
+    let last_time = performance.now();
     function animate() {
         requestAnimationFrame(animate);
-
         let timestamp = performance.now();
-        if (isGame()) {
-            Game.paused = Emitter.paused;
-            if (View.canvas.offsetParent) {
-                View.controls.update();
-                frame(Math.min(0.1, (timestamp - last_game_time) / 1000));
-            }
-            last_game_time = timestamp;
-        } else if (timestamp - last_frame_time > 32) {
-            last_frame_time = timestamp;
-            if (!Emitter.paused) {
-                Emitter.tick();
-            }
-        }
-
-        if (isGame()) {
-            if (View.canvas.offsetParent) View.frames_this_second++;
-            stats.time = Game.elapsed;
-        } else if (View.canvas.offsetParent && (!Emitter.paused || !document.hasFocus || document.hasFocus())) {
-            View.controls.update()
-            Scene.updateFacingRotation(View.camera);
-            View.renderer.render(View.scene, View.camera);
+        Game.paused = Emitter.paused;
+        if (View.canvas.offsetParent) {
+            frame(Math.min(0.1, (timestamp - last_time) / 1000));
             View.frames_this_second++;
-            stats.time = isGame() ? Game.elapsed : Emitter.age;
+            stats.time = Game.elapsed;
         }
+        last_time = timestamp;
     }
-    function resizeCanvas() {
-        var wrapper = View.canvas.parentNode;
-        var height = wrapper.clientHeight
-        var width = wrapper.clientWidth
-
-        View.camera.aspect = width/height;
-        View.camera.updateProjectionMatrix();
-
-        View.renderer.setSize(width, height);
-        View.renderer.setPixelRatio(window.devicePixelRatio);
-    }
-    window.addEventListener('resize', resizeCanvas);
-    window.addEventListener('orientationchange', () => {
-        setTimeout(resizeCanvas, 150)
-    });
 
     window.addEventListener('keypress', (e) => {
         var input_focus = document.querySelector('input:focus, div[contenteditable="true"]:focus, textarea:focus')
@@ -303,7 +189,6 @@
             engine: Game.engine,
             environment: Game.environment,
             environments: ENVIRONMENTS,
-            webgpu: !!navigator.gpu,
             game: Game
         }},
         components: {
@@ -316,9 +201,7 @@
             CheckCheck,
         },
         methods: {
-            updateSize() {
-                resizeCanvas()
-            },
+            updateSize() {},
             showPlaceholderBar() {
                 this.show_placeholder_bar = true;
                 updateVariablePlaceholderList(this.placeholder_keys);
@@ -348,7 +231,6 @@
                 this.$refs.bake_placeholder_confirm_dialog.showModal();
             },
             changeLoopMode() {
-                Emitter.loop_mode = this.loop_mode;
                 Game.loop_mode = this.loop_mode;
             },
             async changeEngine() {
@@ -365,8 +247,7 @@
                 Emitter.parent_mode = this.parent_mode;
             },
             toggleCollision() {
-                Emitter.ground_collision = !Emitter.ground_collision;
-                this.collision = Emitter.ground_collision;
+                this.collision = !this.collision;
                 Game.collision = this.collision;
                 restart();
             },
@@ -405,7 +286,7 @@
                 View.frames_this_second = 0;
             }, 1000)
             setInterval(() => {
-                this.particles = isGame() ? Game.particles : Emitter.particles.length;
+                this.particles = Game.particles;
             }, 200)
             setInterval(() => {
                 if (window.document.hasFocus() && View.canvas.offsetParent) {
@@ -435,17 +316,8 @@
 		width: 100%;
 		position: relative;
 	}
-    #canvas_wrapper >>> canvas.game_canvas {
-        position: absolute;
-        top: 0;
-        left: 0;
-        pointer-events: none;
-    }
-    #canvas_wrapper.game_mode {
+    #canvas_wrapper {
         background-color: #29323a;
-    }
-    #canvas_wrapper.game_mode canvas#canvas {
-        opacity: 0;
     }
     #game_status {
         position: absolute;

@@ -2,6 +2,7 @@ import { Texture } from './texture_edit';
 import vscode from './vscode_extension'
 import Wintersky from 'wintersky'
 import {View} from './components/Preview'
+import {position} from './orbit'
 import { EventSubEffects } from './event_sub_effects';
 import { bbuid } from './util';
 
@@ -86,9 +87,6 @@ Config.unsupported_fields = {};
 
 Config.reset()
 
-function initParticles(View) {	
-	View.scene.add(Scene.space);
-}
 Config.onTextureUpdate = function() {
 	if (!window.Data) return;
 
@@ -117,11 +115,11 @@ Emitter.Molang.global_variables = {
 		return val;
 	},*/
 	get 'query.distance_from_camera'() {
-		return View.camera.position.length();
+		return Math.hypot(...position());
 	},
 	'query.lod_index'(indices) {
 		indices.sort((a, b) => a - b);
-		let distance = View.camera.position.length();
+		let distance = Math.hypot(...position());
 		let index = indices.length;
 		indices.forEachReverse((val, i) => {
 			if (distance < val) index = i;
@@ -129,7 +127,7 @@ Emitter.Molang.global_variables = {
 		return index;
 	},
 	'query.camera_distance_range_lerp'(a, b) {
-		let distance = View.camera.position.length();
+		let distance = Math.hypot(...position());
 		// Prevent division by zero
 		const denominator = b - a;
 		if (Math.abs(denominator) < 1e-8) {
@@ -152,5 +150,5 @@ Emitter.Molang.variableHandler = (key, params) => {
 
 }
 
-export {Emitter, Config, initParticles, Scene, QuickSetup}
+export {Emitter, Config, Scene, QuickSetup}
 
