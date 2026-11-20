@@ -193,7 +193,7 @@ function camera() {
 function remoteUrl(path) {
 	let rest = p => path.slice(p.length + 1).split('/').map(encodeURIComponent).join('/');
 	if (path.startsWith(VANILLA + '/')) return VANILLA_URL + rest(VANILLA);
-	if (path.startsWith(SCANS + '/')) return local('scans/' + rest(SCANS));
+	if (/^\/scan\/[a-z_]+\.mcstructure$/.test(path)) return local('scans/' + rest(SCANS));
 	return null;
 }
 
