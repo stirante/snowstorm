@@ -15,7 +15,7 @@ export function watchFrameRate(now, poke) {
 	let slow = frames < SLOW_RATE && now - second_start < 1500;
 	frames = 0;
 	second_start = now;
-	if (!slow || now < rest_until) return;
+	if (!slow || now < rest_until || !poke()) return;
 	rest_until = now + REST_TIME;
 	let timer = setInterval(poke, 4);
 	setTimeout(() => clearInterval(timer), WAKE_TIME);
