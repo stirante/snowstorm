@@ -435,6 +435,10 @@ export function frame(dt) {
 	draw();
 }
 
+export function pokeGpu() {
+	if (viewport != null && !opening) br.depth_at(viewport, 0, 0).catch(() => {});
+}
+
 // The canvas of a frame drawn now (a WebGPU canvas keeps its picture only within the task that drew it).
 export function screenshotURL() {
 	if (viewport == null) return null;

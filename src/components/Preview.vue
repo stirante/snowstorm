@@ -122,6 +122,8 @@
     } from 'lucide-vue'
     import {EditListeners} from '../edits'
     import {updateVariablePlaceholderList, bakePlaceholderVariable} from './../variable_placeholders'
+    import { watchFrameRate } from '../frame_pacing'
+    import { pokeGpu } from '../game_preview'
     import { Game, Mers, ENVIRONMENTS, QUALITIES, initGame, setEngine, setEnvironment, setQuality, setMers, exportTextureSet, setTime, frame, restart, screenshotURL } from '../game_preview';
     import { attach } from '../orbit';
 
@@ -196,6 +198,7 @@
             frame(Math.min(0.1, (timestamp - last_time) / 1000));
             View.frames_this_second++;
             stats.time = Game.elapsed;
+            watchFrameRate(timestamp, pokeGpu);
         }
         last_time = timestamp;
     }
