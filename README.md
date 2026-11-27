@@ -1,7 +1,7 @@
 # Snowstorm
 
 > **This fork** ([stirante.com/snowstorm](https://stirante.com/snowstorm/)) previews effects the way the game runs
-> them: bedrock-renderer's WASM simulates the effect with [particle-sim](https://github.com/stirante/particle-sim)
+> them: [bedrock-renderer](https://github.com/stirante/bedrock-renderer)'s WASM simulates the effect with [particle-sim](https://github.com/stirante/particle-sim)
 > (the game's particle rules, Rust) and draws the whole view with the game's Fancy and Vibrant Visuals pipelines
 > (WebGPU); `src/orbit.js` is the camera. The footer picks Fancy or Vibrant Visuals, the environment (a grid, a
 > grass floor or a scanned vanilla area with block collision), the render resolution (Fast = CSS pixels, Sharp = screen pixels)
@@ -10,8 +10,7 @@
 > reference block and player are drawn by the renderer. The simulator's warnings (the game's particle caps, local
 > space quirks, effects it cannot read) are listed in the warnings dialog.
 > Code: `src/game_preview.js`, `src/components/Preview.vue`; `vendor/` holds the two WASM modules
-> (`tools/build-vendor.sh`); `scans/` the vanilla areas (`tools/make_scans.py`, from bedrock-renderer's biome
-> scans); `tools/deploy.sh` publishes the site. Vanilla textures come from Mojang's bedrock-samples on GitHub.
+> (`tools/build-vendor.sh`); `scans/` the vanilla areas (`tools/make_scans.py`, from scanned structures); `tools/deploy.sh` publishes the site. Vanilla textures come from Mojang's bedrock-samples on GitHub.
 > Without WebGPU the preview falls back to Wintersky.
 
 Custom editor for Minecraft Bedrock Edition particle files. Available as a web app and VSCode Extension:

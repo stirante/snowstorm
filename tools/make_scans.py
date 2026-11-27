@@ -1,4 +1,4 @@
-"""Builds the vanilla area environments from bedrock-renderer's biome scans.
+"""Builds the vanilla area environments from a folder of scanned structures (<name>.mcstructure + scenes).
 
 For each scan: scans/<name>.mcstructure (copied), scans/<name>.solid (one byte per block, x fastest, then z, then y;
 1 = particles collide) and an entry in scans/scans.json with the size, the biome and where the structure goes so that
